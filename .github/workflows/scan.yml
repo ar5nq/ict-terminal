@@ -2,11 +2,17 @@ name: ICT SCAN alerts
 
 on:
   schedule:
+    # Every 15 minutes. GitHub does not guarantee this runs exactly on time —
+    # during high load it can slip by several minutes, and schedules are
+    # disabled automatically after 60 days with no repo activity (this
+    # workflow's own state.json commits count as activity, so it should
+    # keep itself alive as long as a STRONG crossover fires at least once
+    # every couple of months — check in on it occasionally regardless).
     - cron: '*/15 * * * *'
-  workflow_dispatch: {}
+  workflow_dispatch: {}   # lets you click "Run workflow" in the Actions tab to test on demand
 
 permissions:
-  contents: write
+  contents: write   # needed so the job can commit the updated state.json back
 
 jobs:
   scan:
@@ -36,4 +42,5 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
           git add state.json
           git diff --cached --quiet || git commit -m "scan state update"
+          git pull --rebase --autostash origin main
           git push
