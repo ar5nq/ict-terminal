@@ -181,8 +181,8 @@ function readDivergence(pivotsA, pivotsB, idA, idB, kind){
   const a1=pivotsA[pivotsA.length-2], a2=pivotsA[pivotsA.length-1];
   const b1=pivotsB[pivotsB.length-2], b2=pivotsB[pivotsB.length-1];
   const aUp = a2.price > a1.price, bUp = b2.price > b1.price;
-  if(aUp !== bUp) return { text: `${idA} printed a ${aUp?'higher':'lower'} ${kind}, ${idB} printed a ${bUp?'higher':'lower'} ${kind} \u2014 that's a divergence`, flag:true, aUp, bUp };
-  return { text: `Both printed a ${aUp?'higher':'lower'} ${kind} \u2014 no divergence here`, flag:false, aUp, bUp };
+  if(aUp !== bUp) return { text: `${idA} printed a ${aUp?'higher':'lower'} ${kind}, ${idB} printed a ${bUp?'higher':'lower'} ${kind} — that's a divergence`, flag:true, aUp, bUp };
+  return { text: `Both printed a ${aUp?'higher':'lower'} ${kind} — no divergence here`, flag:false, aUp, bUp };
 }
 
 function scoreSetup({ trend4h, break1h, range, ote, fvgs, obs, smt, price, instId }){
@@ -191,16 +191,16 @@ function scoreSetup({ trend4h, break1h, range, ote, fvgs, obs, smt, price, instI
   let score = 0; const notes = [];
   const withTrend = trend4h.bias!=='NEUTRAL' && trend4h.bias===bias;
   if(withTrend){ score+=25; notes.push('With the 4H trend (+25)'); }
-  else if(trend4h.bias!=='NEUTRAL'){ score-=20; notes.push('Countertrend vs 4H — this is your ~3W/7L bucket (\u221220)'); }
+  else if(trend4h.bias!=='NEUTRAL'){ score-=20; notes.push('Countertrend vs 4H — this is your ~3W/7L bucket (−20)'); }
   if(range){
     if(range.type==='NESTED'){ score+=20; notes.push('Nested 1H-in-4H range — clean breakout+retest structure (+20)'); }
     else if(range.type==='ALIGNED-UP' || range.type==='ALIGNED-DOWN'){ score+=15; notes.push(`Aligned/trending range (${range.type}) (+15)`); }
-    else if(range.type==='SHIFTED-UP' || range.type==='SHIFTED-DOWN'){ score-=10; notes.push(`Shifted range (${range.type}) — 4H box running stale on one side, avoid-leaning (\u221210)`); }
-    else{ score-=15; notes.push('Expanded range on both sides — no clean box left, avoid-leaning (\u221215)'); }
+    else if(range.type==='SHIFTED-UP' || range.type==='SHIFTED-DOWN'){ score-=10; notes.push(`Shifted range (${range.type}) — 4H box running stale on one side, avoid-leaning (−10)`); }
+    else{ score-=15; notes.push('Expanded range on both sides — no clean box left, avoid-leaning (−15)'); }
   }
   if(ote && ote.dir===bias){
     const inZone = price<=Math.max(ote.top,ote.bottom) && price>=Math.min(ote.top,ote.bottom);
-    if(inZone){ score+=15; notes.push('Price is inside the OTE 61.8\u201379% zone (+15)'); }
+    if(inZone){ score+=15; notes.push('Price is inside the OTE 61.8–79% zone (+15)'); }
   }
   const dirFVGs = (fvgs||[]).filter(g=> g.dir===bias && !g.filled);
   if(dirFVGs.length){ score+=10; notes.push(`${dirFVGs.length} unfilled ${bias.toLowerCase()} FVG in your direction (+10)`); }
@@ -240,18 +240,18 @@ function computeScan(inst, bars4, bars1, partnerBars1){
   return { trend4h, break1h, range, ote, fvgs, obs, smt, result };
 }
 
-async function fetchYahooBars(yTicker, interval, range){
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yTicker)}?interval=${interval}&range=${range}`;
+async function fetchYahooBarsFrom(host, yTicker, interval, range){
+  const url = `https://${host}/v8/finance/chart/${encodeURIComponent(yTicker)}?interval=${interval}&range=${range}`;
   const res = await fetch(url, {
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
       'Accept': 'application/json',
     },
   });
-  if(!res.ok) throw new Error(`bad status ${res.status} for ${yTicker}`);
+  if(!res.ok) throw new Error(`bad status ${res.status} for ${yTicker} via ${host}`);
   const json = await res.json();
   const result = json?.chart?.result?.[0];
-  if(!result) throw new Error(`no chart result for ${yTicker}`);
+  if(!result) throw new Error(`no chart result for ${yTicker} via ${host}`);
   const times = result.timestamp || [];
   const q = result.indicators?.quote?.[0] || {};
   const bars = [];
@@ -259,8 +259,24 @@ async function fetchYahooBars(yTicker, interval, range){
     const o=q.open?.[i], h=q.high?.[i], l=q.low?.[i], c=q.close?.[i];
     if(o!=null && h!=null && l!=null && c!=null) bars.push({ t:tm, o, h, l, c });
   });
-  if(bars.length<2) throw new Error(`empty series for ${yTicker}`);
+  if(bars.length<2) throw new Error(`empty series for ${yTicker} via ${host}`);
   return bars;
+}
+
+// query1 occasionally 404s specific symbols (seen on XAUUSD=X/XAGUSD=X from a
+// non-browser context) even though the same symbol works fine elsewhere —
+// query2 is the same API on a different host and often succeeds when query1
+// doesn't. Try both before giving up on an instrument for this run.
+async function fetchYahooBars(yTicker, interval, range){
+  try{
+    return await fetchYahooBarsFrom('query1.finance.yahoo.com', yTicker, interval, range);
+  }catch(err1){
+    try{
+      return await fetchYahooBarsFrom('query2.finance.yahoo.com', yTicker, interval, range);
+    }catch(err2){
+      throw new Error(`${err1.message} | fallback also failed: ${err2.message}`);
+    }
+  }
 }
 
 // Same trick the browser uses: Yahoo has no native 4H interval, so pull 1H
