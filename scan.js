@@ -150,17 +150,17 @@ function classifyRange(bars4h, bars1h){
   const h1=Math.max(...use1h.map(b=>b.h)), l1=Math.min(...use1h.map(b=>b.l));
   const tol = (h4-l4)*0.03 || h4*0.0005;
 
-  const hCmp = Math.abs(h1-h4)<=tol ? 0 : (h1>h4 ? 1 : -1);
-  const lCmp = Math.abs(l1-l4)<=tol ? 0 : (l1>l4 ? 1 : -1);
+  const hCmp = Math.abs(h1-h4)<=tol ? 0 : (h1>h4 ? 1 : -1); // 1H high vs 4H high
+  const lCmp = Math.abs(l1-l4)<=tol ? 0 : (l1>l4 ? 1 : -1); // 1H low vs 4H low
 
   let type, note;
   if(hCmp>0 && lCmp<0){
     type='EXPANDED';
     note="1H has pushed beyond the 4H box on BOTH sides — no clean box left at all. Lowest-quality read of the six; if you trade it anyway, retest-rejection is doing all the work, not the box.";
-  }else if(hCmp>0){
+  }else if(hCmp>0){ // hCmp=1, lCmp is 0 or 1
     type='SHIFTED-UP';
     note="1H has already broken above the 4H high while its low still sits above (or at) the 4H low — the 4H box is running stale to the upside. Lower-quality read; if you trade it, use the 1H high and 4H low as your two extremes, trend-dependent, and retest-rejection matters more here, not less.";
-  }else if(lCmp<0){
+  }else if(lCmp<0){ // hCmp is -1 or 0, lCmp=-1
     type='SHIFTED-DOWN';
     note="1H has already broken below the 4H low while its high still sits below (or at) the 4H high — the 4H box is running stale to the downside. Vice versa of the shifted-up case: use the 1H low and 4H high as your two extremes, trend-dependent, retest-rejection still matters more here.";
   }else if(hCmp===0 && lCmp>0){
@@ -181,8 +181,8 @@ function readDivergence(pivotsA, pivotsB, idA, idB, kind){
   const a1=pivotsA[pivotsA.length-2], a2=pivotsA[pivotsA.length-1];
   const b1=pivotsB[pivotsB.length-2], b2=pivotsB[pivotsB.length-1];
   const aUp = a2.price > a1.price, bUp = b2.price > b1.price;
-  if(aUp !== bUp) return { text: `${idA} printed a ${aUp?'higher':'lower'} ${kind}, ${idB} printed a ${bUp?'higher':'lower'} ${kind} — that's a divergence`, flag:true, aUp, bUp };
-  return { text: `Both printed a ${aUp?'higher':'lower'} ${kind} — no divergence here`, flag:false, aUp, bUp };
+  if(aUp !== bUp) return { text: `${idA} printed a ${aUp?'higher':'lower'} ${kind}, ${idB} printed a ${bUp?'higher':'lower'} ${kind} \u2014 that's a divergence`, flag:true, aUp, bUp };
+  return { text: `Both printed a ${aUp?'higher':'lower'} ${kind} \u2014 no divergence here`, flag:false, aUp, bUp };
 }
 
 function scoreSetup({ trend4h, break1h, range, ote, fvgs, obs, smt, price, instId }){
@@ -191,16 +191,16 @@ function scoreSetup({ trend4h, break1h, range, ote, fvgs, obs, smt, price, instI
   let score = 0; const notes = [];
   const withTrend = trend4h.bias!=='NEUTRAL' && trend4h.bias===bias;
   if(withTrend){ score+=25; notes.push('With the 4H trend (+25)'); }
-  else if(trend4h.bias!=='NEUTRAL'){ score-=20; notes.push('Countertrend vs 4H — this is your ~3W/7L bucket (−20)'); }
+  else if(trend4h.bias!=='NEUTRAL'){ score-=20; notes.push('Countertrend vs 4H — this is your ~3W/7L bucket (\u221220)'); }
   if(range){
     if(range.type==='NESTED'){ score+=20; notes.push('Nested 1H-in-4H range — clean breakout+retest structure (+20)'); }
     else if(range.type==='ALIGNED-UP' || range.type==='ALIGNED-DOWN'){ score+=15; notes.push(`Aligned/trending range (${range.type}) (+15)`); }
-    else if(range.type==='SHIFTED-UP' || range.type==='SHIFTED-DOWN'){ score-=10; notes.push(`Shifted range (${range.type}) — 4H box running stale on one side, avoid-leaning (−10)`); }
-    else{ score-=15; notes.push('Expanded range on both sides — no clean box left, avoid-leaning (−15)'); }
+    else if(range.type==='SHIFTED-UP' || range.type==='SHIFTED-DOWN'){ score-=10; notes.push(`Shifted range (${range.type}) — 4H box running stale on one side, avoid-leaning (\u221210)`); }
+    else{ score-=15; notes.push('Expanded range on both sides — no clean box left, avoid-leaning (\u221215)'); }
   }
   if(ote && ote.dir===bias){
     const inZone = price<=Math.max(ote.top,ote.bottom) && price>=Math.min(ote.top,ote.bottom);
-    if(inZone){ score+=15; notes.push('Price is inside the OTE 61.8–79% zone (+15)'); }
+    if(inZone){ score+=15; notes.push('Price is inside the OTE 61.8\u201379% zone (+15)'); }
   }
   const dirFVGs = (fvgs||[]).filter(g=> g.dir===bias && !g.filled);
   if(dirFVGs.length){ score+=10; notes.push(`${dirFVGs.length} unfilled ${bias.toLowerCase()} FVG in your direction (+10)`); }
@@ -209,4 +209,196 @@ function scoreSetup({ trend4h, break1h, range, ote, fvgs, obs, smt, price, instI
   if((obs||[]).length){ score+=10; notes.push(`${obs.length} order block(s) mapped on this leg (+10)`); }
   if(smt){
     const bullSMT = bias==='BULLISH' && smt.lowDiv && smt.lowDiv.flag && smt.lowDiv.aUp===false && smt.lowDiv.bUp===true;
-    const bearSMT = bias==='BEARISH' && smt.highDiv && smt.highDiv.flag &&
+    const bearSMT = bias==='BEARISH' && smt.highDiv && smt.highDiv.flag && smt.highDiv.aUp===true && smt.highDiv.bUp===false;
+    if(bullSMT){ score+=10; notes.push(`SMT divergence vs ${smt.partnerId} on the low — ${instId} weaker there, bullish tell (+10)`); }
+    else if(bearSMT){ score+=10; notes.push(`SMT divergence vs ${smt.partnerId} on the high — ${instId} stronger there, bearish tell (+10)`); }
+  }
+  score = Math.max(0, Math.min(100, score));
+  const label = score>=70?'STRONG':score>=45?'MODERATE':score>=20?'WEAK':'AVOID';
+  return { score, bias, label, notes, withTrend };
+}
+
+function computeScan(inst, bars4, bars1, partnerBars1){
+  const pivots1  = findPivots(bars1, 2);
+  const trend4h  = structureTrend(bars4, 2);
+  const break1h  = lastBreak(bars1, trend4h.bias, 2);
+  const range    = classifyRange(bars4, bars1);
+  const ote      = computeOTE(pivots1);
+  const fvgs     = findFVGs(bars1, 6);
+  const obs      = findOrderBlocks(bars1, pivots1);
+  const partnerId = SMT_PARTNER[inst.id];
+  let smt = null;
+  if(partnerId && partnerBars1 && partnerBars1.length>=6){
+    const pivotsP = findPivots(partnerBars1, 2);
+    smt = {
+      partnerId,
+      highDiv: readDivergence(pivots1.highs, pivotsP.highs, inst.id, partnerId, 'high'),
+      lowDiv:  readDivergence(pivots1.lows,  pivotsP.lows,  inst.id, partnerId, 'low'),
+    };
+  }
+  const result   = scoreSetup({ trend4h, break1h, range, ote, fvgs, obs, smt, price: inst.price, instId: inst.id });
+  return { trend4h, break1h, range, ote, fvgs, obs, smt, result };
+}
+
+async function fetchYahooBarsFrom(host, yTicker, interval, range){
+  const url = `https://${host}/v8/finance/chart/${encodeURIComponent(yTicker)}?interval=${interval}&range=${range}`;
+  const res = await fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+      'Accept': 'application/json',
+    },
+  });
+  if(!res.ok) throw new Error(`bad status ${res.status} for ${yTicker} via ${host}`);
+  const json = await res.json();
+  const result = json?.chart?.result?.[0];
+  if(!result) throw new Error(`no chart result for ${yTicker} via ${host}`);
+  const times = result.timestamp || [];
+  const q = result.indicators?.quote?.[0] || {};
+  const bars = [];
+  times.forEach((tm,i)=>{
+    const o=q.open?.[i], h=q.high?.[i], l=q.low?.[i], c=q.close?.[i];
+    if(o!=null && h!=null && l!=null && c!=null) bars.push({ t:tm, o, h, l, c });
+  });
+  if(bars.length<2) throw new Error(`empty series for ${yTicker} via ${host}`);
+  return bars;
+}
+
+// query1 occasionally 404s specific symbols (seen on XAUUSD=X/XAGUSD=X from a
+// non-browser context) even though the same symbol works fine elsewhere —
+// query2 is the same API on a different host and often succeeds when query1
+// doesn't. Try both before giving up on an instrument for this run.
+async function fetchYahooBars(yTicker, interval, range){
+  try{
+    return await fetchYahooBarsFrom('query1.finance.yahoo.com', yTicker, interval, range);
+  }catch(err1){
+    try{
+      return await fetchYahooBarsFrom('query2.finance.yahoo.com', yTicker, interval, range);
+    }catch(err2){
+      throw new Error(`${err1.message} | fallback also failed: ${err2.message}`);
+    }
+  }
+}
+
+// Same trick the browser uses: Yahoo has no native 4H interval, so pull 1H
+// bars and bundle every 4 into a 4H candle.
+// Some instruments have more than one candidate Yahoo symbol (e.g. gold's
+// spot symbol occasionally 404s server-side even though it's fine from a
+// browser — GC=F futures is the reliable fallback). Try each in order.
+async function get4hAnd1h(yTickers){
+  let lastErr;
+  for(const yTicker of yTickers){
+    try{
+      const raw1h = await fetchYahooBars(yTicker, '60m', '5d');
+      const bars4 = aggregateCandles(raw1h, 4);
+      return { bars4, bars1: raw1h, usedTicker: yTicker };
+    }catch(err){
+      lastErr = err;
+    }
+  }
+  throw lastErr;
+}
+
+async function pushNotify(title, message, priority){
+  let sentSomewhere = false;
+
+  // Primary: real Web Push straight to the installed app (via its service
+  // worker) — this is what makes the alert land on the home-screen app icon.
+  if(PUSH_SUBSCRIPTION && VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY){
+    try{
+      webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+      const subscription = JSON.parse(PUSH_SUBSCRIPTION);
+      await webpush.sendNotification(subscription, JSON.stringify({ title, body: message }));
+      console.log('  web push sent');
+      sentSomewhere = true;
+    }catch(err){
+      console.error('web push failed:', err.message);
+    }
+  }
+
+  // Optional secondary channel: ntfy.sh, only if you've set NTFY_TOPIC too.
+  if(NTFY_TOPIC){
+    try{
+      const res = await fetch(`https://ntfy.sh/${encodeURIComponent(NTFY_TOPIC)}`, {
+        method: 'POST',
+        body: message,
+        headers: { 'Title': title, 'Priority': priority || 'default', 'Tags': 'chart_with_upwards_trend' },
+      });
+      if(!res.ok) console.error('ntfy push failed:', res.status, await res.text());
+      else sentSomewhere = true;
+    }catch(err){
+      console.error('ntfy push error:', err.message);
+    }
+  }
+
+  if(!sentSomewhere){
+    console.log('No push channel configured (PUSH_SUBSCRIPTION+VAPID keys, or NTFY_TOPIC) — would have sent:');
+    console.log(title, '\n', message);
+  }
+}
+
+function loadState(){
+  try{ return JSON.parse(fs.readFileSync(STATE_PATH, 'utf8')); }
+  catch(err){ return {}; }
+}
+function saveState(state){
+  fs.writeFileSync(STATE_PATH, JSON.stringify(state, null, 2) + '\n');
+}
+
+async function main(){
+  // Manual test mode: fires a push immediately regardless of any instrument's
+  // actual state, so you can confirm delivery without waiting for a real
+  // STRONG crossover. Triggered by the "Send test push" workflow input.
+  if(process.env.TEST_PUSH === 'true'){
+    console.log('TEST_PUSH mode — sending a test notification, skipping the actual scan.');
+    await pushNotify('\u26a1 SCAN test push', `If you're reading this on your phone, push is wired up correctly. Sent at ${new Date().toISOString()}.`, 'high');
+    return;
+  }
+
+  const state = loadState();
+  const cache = {};
+
+  // fetch every tracked instrument once (watchlist + their SMT partners)
+  const needed = new Set(WATCHLIST);
+  WATCHLIST.forEach(id=> { if(SMT_PARTNER[id]) needed.add(SMT_PARTNER[id]); });
+
+  for(const id of needed){
+    const inst = INSTRUMENTS[id];
+    if(!inst) continue;
+    try{
+      cache[id] = await get4hAnd1h(inst.yTickers);
+      console.log(`fetched ${id}: ${cache[id].bars4.length} x 4H, ${cache[id].bars1.length} x 1H (via ${cache[id].usedTicker})`);
+    }catch(err){
+      console.error(`fetch failed for ${id}:`, err.message);
+    }
+  }
+
+  for(const id of WATCHLIST){
+    const inst = INSTRUMENTS[id];
+    const own = cache[id];
+    if(!own || own.bars4.length<6 || own.bars1.length<6){
+      console.log(`${id}: not enough bars, skipping this run`);
+      continue;
+    }
+    const partnerId = SMT_PARTNER[id];
+    const partnerBars1 = cache[partnerId] ? cache[partnerId].bars1 : null;
+    const price = own.bars1[own.bars1.length-1].c;
+
+    const bundle = computeScan({ id, price }, own.bars4, own.bars1, partnerBars1);
+    const prevLabel = state[id];
+    console.log(`${id}: ${bundle.result.bias || 'NO READ'} · ${bundle.result.label} (${bundle.result.score}/100), was ${prevLabel || 'unknown'}`);
+
+    if(bundle.result.label==='STRONG' && prevLabel!=='STRONG'){
+      const body = [
+        `${bundle.result.score}/100 · ${bundle.range ? bundle.range.type : ''}`,
+        ...bundle.result.notes,
+      ].join('\n');
+      await pushNotify(`⚡ SCAN: ${id} STRONG ${bundle.result.bias}`, body, 'high');
+      console.log(`  -> pushed STRONG alert for ${id}`);
+    }
+    state[id] = bundle.result.label;
+  }
+
+  saveState(state);
+}
+
+main().catch(err=>{ console.error(err); process.exit(1); });
