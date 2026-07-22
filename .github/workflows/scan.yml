@@ -9,7 +9,12 @@ on:
     # keep itself alive as long as a STRONG crossover fires at least once
     # every couple of months — check in on it occasionally regardless).
     - cron: '*/15 * * * *'
-  workflow_dispatch: {}   # lets you click "Run workflow" in the Actions tab to test on demand
+  workflow_dispatch:
+    inputs:
+      test_push:
+        description: 'Send a test push notification instead of running the real scan'
+        type: boolean
+        default: false
 
 permissions:
   contents: write   # needed so the job can commit the updated state.json back
@@ -34,6 +39,7 @@ jobs:
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
           VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          TEST_PUSH: ${{ github.event.inputs.test_push }}
         run: node scan.js
 
       - name: Commit updated state
