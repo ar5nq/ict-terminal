@@ -25,12 +25,12 @@ const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:example@example.com';
 const WATCHLIST = ['XAUUSD', 'NAS100', 'EURUSD'];
 
 const INSTRUMENTS = {
-  EURUSD: { id:'EURUSD', digits:4, yTicker:'EURUSD=X' },
-  GBPUSD: { id:'GBPUSD', digits:4, yTicker:'GBPUSD=X' },
-  XAUUSD: { id:'XAUUSD', digits:2, yTicker:'XAUUSD=X' },
-  XAGUSD: { id:'XAGUSD', digits:3, yTicker:'XAGUSD=X' },
-  NAS100: { id:'NAS100', digits:1, yTicker:'^NDX' },
-  SP500:  { id:'SP500',  digits:1, yTicker:'^GSPC' },
+  EURUSD: { id:'EURUSD', digits:4, yTickers:['EURUSD=X'] },
+  GBPUSD: { id:'GBPUSD', digits:4, yTickers:['GBPUSD=X'] },
+  XAUUSD: { id:'XAUUSD', digits:2, yTickers:['XAUUSD=X', 'GC=F'] },   // GC=F = gold futures, reliable fallback
+  XAGUSD: { id:'XAGUSD', digits:3, yTickers:['XAGUSD=X', 'SI=F'] },   // SI=F = silver futures, reliable fallback
+  NAS100: { id:'NAS100', digits:1, yTickers:['^NDX'] },
+  SP500:  { id:'SP500',  digits:1, yTickers:['^GSPC'] },
 };
 
 const SMT_PARTNER = { NAS100:'SP500', SP500:'NAS100', EURUSD:'GBPUSD', GBPUSD:'EURUSD', XAUUSD:'XAGUSD', XAGUSD:'XAUUSD' };
@@ -281,10 +281,21 @@ async function fetchYahooBars(yTicker, interval, range){
 
 // Same trick the browser uses: Yahoo has no native 4H interval, so pull 1H
 // bars and bundle every 4 into a 4H candle.
-async function get4hAnd1h(yTicker){
-  const raw1h = await fetchYahooBars(yTicker, '60m', '5d');
-  const bars4 = aggregateCandles(raw1h, 4);
-  return { bars4, bars1: raw1h };
+// Some instruments have more than one candidate Yahoo symbol (e.g. gold's
+// spot symbol occasionally 404s server-side even though it's fine from a
+// browser — GC=F futures is the reliable fallback). Try each in order.
+async function get4hAnd1h(yTickers){
+  let lastErr;
+  for(const yTicker of yTickers){
+    try{
+      const raw1h = await fetchYahooBars(yTicker, '60m', '5d');
+      const bars4 = aggregateCandles(raw1h, 4);
+      return { bars4, bars1: raw1h, usedTicker: yTicker };
+    }catch(err){
+      lastErr = err;
+    }
+  }
+  throw lastErr;
 }
 
 async function pushNotify(title, message, priority){
@@ -345,8 +356,8 @@ async function main(){
     const inst = INSTRUMENTS[id];
     if(!inst) continue;
     try{
-      cache[id] = await get4hAnd1h(inst.yTicker);
-      console.log(`fetched ${id}: ${cache[id].bars4.length} x 4H, ${cache[id].bars1.length} x 1H`);
+      cache[id] = await get4hAnd1h(inst.yTickers);
+      console.log(`fetched ${id}: ${cache[id].bars4.length} x 4H, ${cache[id].bars1.length} x 1H (via ${cache[id].usedTicker})`);
     }catch(err){
       console.error(`fetch failed for ${id}:`, err.message);
     }
