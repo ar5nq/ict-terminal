@@ -1,0 +1,16 @@
+{
+  "name": "ict-scan-alerts",
+  "version": "1.0.0",
+  "description": "24/7 SCAN confluence alerts (XAUUSD/NAS100/EURUSD) pushed straight to the installed ICT Terminal app via Web Push, independent of any device being awake.",
+  "private": true,
+  "main": "scan.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "scan": "node scan.js"
+  },
+  "dependencies": {
+    "web-push": "^3.6.7"
+  }
+}

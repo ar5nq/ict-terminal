@@ -1,0 +1,2298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ICT Terminal</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#08090b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ICT Term">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<style>
+  :root{
+    --bg:#08090b;
+    --panel:#0f1215;
+    --panel-hi:#14181c;
+    --border:#20262c;
+    --border-soft:#171b1f;
+    --amber:#ffb000;
+    --amber-dim:#8a6200;
+    --green:#26d07c;
+    --red:#ff4d5e;
+    --text:#d8dde3;
+    --muted:#5c6773;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", "Consolas", monospace;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{ background:var(--bg); color:var(--text); font-family:var(--mono); height:100%; overflow-x:hidden; }
+  ::selection{background:var(--amber); color:#000;}
+
+  /* ---- ticker tape ---- */
+  .tape-wrap{ border-bottom:1px solid var(--border); background:#000; overflow:hidden; white-space:nowrap; position:relative; height:32px; display:flex; align-items:center; }
+  .tape-wrap::after{ content:""; position:absolute; inset:0; background:linear-gradient(90deg,#000 0%,transparent 4%,transparent 96%,#000 100%); pointer-events:none; }
+  .tape{ display:inline-flex; gap:36px; padding-left:100%; animation:scroll 26s linear infinite; cursor:pointer; }
+  @keyframes scroll{ from{transform:translateX(0);} to{transform:translateX(-100%);} }
+  .tape span.item{font-size:12px; letter-spacing:.5px;}
+  .tape b{color:var(--amber); font-weight:600; margin-right:6px;}
+  .up{color:var(--green);} .down{color:var(--red);}
+
+  /* ---- header ---- */
+  header{ display:flex; align-items:center; justify-content:space-between; padding:10px 18px; border-bottom:1px solid var(--border); }
+  .brand{ display:flex; align-items:center; gap:10px; }
+  .brand .dot{ width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 8px var(--green); animation:pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:.35;} }
+  .brand h1{ font-size:14px; letter-spacing:2px; font-weight:600; }
+  .brand h1 span{color:var(--amber);}
+  .clock{font-size:12px; color:var(--muted); letter-spacing:1px;}
+  .layout-toggle{ display:flex; gap:6px; }
+  .layout-toggle button{ background:var(--panel); border:1px solid var(--border); color:var(--muted); font-family:var(--mono); font-size:11px; padding:6px 10px; cursor:pointer; letter-spacing:1px; }
+  .layout-toggle button:hover{color:var(--text); border-color:#3a434c;}
+  .layout-toggle button.active{ color:#000; background:var(--amber); border-color:var(--amber); }
+
+  /* ---- command bar ---- */
+  .cmdbar-wrap{ border-bottom:1px solid var(--border); background:#000; padding:8px 18px; position:relative; }
+  .cmdbar{ display:flex; align-items:center; gap:8px; }
+  .cmdbar .caret{ color:var(--amber); font-size:14px; }
+  .cmdbar input{
+    flex:1; background:transparent; border:none; outline:none;
+    color:var(--amber); font-family:var(--mono); font-size:14px; letter-spacing:1px;
+    text-transform:uppercase;
+  }
+  .cmdbar input::placeholder{ color:var(--amber-dim); text-transform:none; letter-spacing:normal; }
+  .cmdbar .hint{ font-size:10px; color:var(--muted); letter-spacing:.5px; white-space:nowrap; }
+  .autocomplete{
+    position:absolute; top:100%; left:18px; right:18px; background:var(--panel);
+    border:1px solid var(--border); border-top:none; z-index:20; display:none;
+  }
+  .autocomplete.show{display:block;}
+  .autocomplete div{ padding:6px 12px; font-size:12px; color:var(--muted); cursor:pointer; display:flex; justify-content:space-between; }
+  .autocomplete div:hover, .autocomplete div.sel{ background:var(--panel-hi); color:var(--text); }
+  .autocomplete div b{color:var(--amber); font-weight:600;}
+
+  /* ---- grid ---- */
+  main{ padding:16px; display:grid; gap:14px; grid-template-columns:1fr 1fr; }
+  main.stacked{grid-template-columns:1fr;}
+  #detail{ padding:16px; display:none; }
+
+  .panel{ background:var(--panel); border:1px solid var(--border); display:flex; flex-direction:column; min-height:280px; cursor:pointer; transition:border-color .15s; }
+  .panel:hover{ border-color:#3a434c; }
+  .panel-head{ display:flex; justify-content:space-between; align-items:flex-start; padding:12px 14px 8px; border-bottom:1px solid var(--border-soft); }
+  .sym{ font-size:12px; letter-spacing:1.5px; color:var(--muted); display:flex; align-items:center; gap:6px; }
+  .sym .livedot{ width:6px; height:6px; border-radius:50%; background:var(--green); }
+  .badge{ font-size:9px; letter-spacing:1px; padding:1px 5px; border:1px solid var(--border); margin-left:2px; }
+  .badge.live{color:var(--green); border-color:var(--green);}
+  .badge.sim{color:var(--amber); border-color:var(--amber-dim);}
+  .sym-name{ font-size:16px; color:var(--text); font-weight:600; letter-spacing:.5px; margin-top:2px; }
+  .price-block{text-align:right;}
+  .price{ font-size:22px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .chg{ font-size:12px; font-variant-numeric:tabular-nums; margin-top:2px; }
+  canvas{ display:block; width:100%; flex:1; }
+  .panel-foot{ display:flex; justify-content:space-between; padding:8px 14px; border-top:1px solid var(--border-soft); font-size:11px; color:var(--muted); letter-spacing:.5px; }
+  .panel-foot b{color:var(--text); font-weight:500;}
+
+  /* ---- detail views ---- */
+  .detail-head{ display:flex; align-items:baseline; gap:14px; margin-bottom:14px; flex-wrap:wrap; }
+  .detail-head .code{ background:var(--amber); color:#000; font-size:11px; font-weight:700; padding:2px 8px; letter-spacing:1px; }
+  .detail-head .back{ color:var(--muted); font-size:11px; cursor:pointer; letter-spacing:.5px; }
+  .detail-head .back:hover{ color:var(--amber); }
+  .detail-title{ font-size:20px; font-weight:600; }
+  .detail-sub{ font-size:11px; color:var(--muted); }
+
+  .qr-box{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:60px 0; border:1px solid var(--border); background:var(--panel); }
+  .qr-price{ font-size:56px; font-weight:700; font-variant-numeric:tabular-nums; }
+  .qr-chg{ font-size:16px; font-variant-numeric:tabular-nums; }
+  .qr-meta{ display:flex; gap:28px; margin-top:18px; font-size:12px; color:var(--muted); }
+  .qr-meta b{ color:var(--text); }
+  .qr-countdown{ font-size:10px; color:var(--muted); letter-spacing:1px; }
+
+  .gp-wrap{ border:1px solid var(--border); background:var(--panel); padding:14px; }
+  .gp-canvas{ width:100%; height:380px; }
+  .gp-stats{ display:flex; gap:24px; margin-top:12px; font-size:12px; color:var(--muted); flex-wrap:wrap; }
+  .gp-stats b{ color:var(--text); }
+
+  table.hp{ width:100%; border-collapse:collapse; font-size:12px; }
+  table.hp th{ text-align:left; color:var(--muted); font-weight:500; letter-spacing:1px; font-size:10px; padding:8px 10px; border-bottom:1px solid var(--border); }
+  table.hp td{ padding:6px 10px; border-bottom:1px solid var(--border-soft); font-variant-numeric:tabular-nums; }
+  table.hp tr:hover td{ background:var(--panel-hi); }
+
+  .fxc-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+
+  .risk-field{ margin-bottom:10px; }
+  .risk-field label{ display:block; font-size:10px; color:var(--muted); letter-spacing:.5px; margin-bottom:4px; }
+  .risk-field input, .risk-field select{
+    width:100%; background:#000; border:1px solid var(--border); color:var(--text);
+    font-family:var(--mono); font-size:13px; padding:7px 9px; outline:none;
+  }
+  .risk-field input:focus, .risk-field select:focus{ border-color:var(--amber); }
+
+  .help-grid{ display:grid; grid-template-columns:100px 1fr; gap:2px 16px; font-size:13px; max-width:640px; }
+  .help-grid .k{ color:var(--amber); font-weight:600; }
+  .help-grid .v{ color:var(--text); }
+  .help-section{ margin-top:20px; font-size:11px; color:var(--muted); letter-spacing:1px; text-transform:uppercase; border-bottom:1px solid var(--border-soft); padding-bottom:4px; margin-bottom:8px; }
+  .help-note{ margin-top:20px; font-size:11px; color:var(--muted); line-height:1.6; max-width:640px; }
+
+  .intel-verdict{ display:flex; align-items:center; gap:16px; padding:18px; border:1px solid var(--border); background:var(--panel); margin-bottom:14px; }
+  .intel-verdict .label{ font-size:11px; color:var(--muted); letter-spacing:1.5px; }
+  .intel-verdict .call{ font-size:24px; font-weight:700; letter-spacing:1px; }
+  .intel-verdict .dots{ display:flex; gap:6px; margin-left:auto; font-size:11px; color:var(--muted); }
+  .intel-verdict .dots span{ display:inline-flex; align-items:center; gap:4px; }
+  .intel-verdict .dots i{ width:8px; height:8px; border-radius:50%; display:inline-block; }
+  .intel-grid{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; }
+  .intel-card{ border:1px solid var(--border); background:var(--panel); padding:14px; }
+  .intel-card h3{ font-size:11px; letter-spacing:1.5px; color:var(--muted); margin-bottom:10px; }
+  .intel-row{ display:flex; align-items:center; gap:8px; font-size:12px; padding:4px 0; }
+  .intel-row i.dot{ width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .dot-bull{background:var(--green);}
+  .dot-bear{background:var(--red);}
+  .dot-neu{background:var(--muted);}
+
+  footer{ padding:10px 18px 20px; font-size:11px; color:var(--muted); letter-spacing:.3px; border-top:1px solid var(--border); display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px; }
+
+  .ws-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(320px,1fr)); gap:14px; }
+  .ws-panel{ background:var(--panel); border:1px solid var(--border); }
+  .ws-panel-head{ display:flex; justify-content:space-between; align-items:center; padding:8px 12px; border-bottom:1px solid var(--border-soft); font-size:11px; color:var(--muted); letter-spacing:1px; }
+  .ws-close{ background:none; border:none; color:var(--muted); cursor:pointer; font-size:13px; line-height:1; padding:2px 4px; }
+  .ws-close:hover{ color:var(--red); }
+  .ws-panel-body{ padding:12px; min-height:60px; }
+  .ws-tf-chip{ font-family:var(--mono); }
+
+  @media (max-width:760px){
+    main{grid-template-columns:1fr;}
+    .intel-grid{grid-template-columns:1fr;}
+    .fxc-grid{grid-template-columns:1fr;}
+    .ws-grid{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+
+<div class="tape-wrap"><div class="tape" id="tape"></div></div>
+
+<header>
+  <div class="brand"><div class="dot"></div><h1>YOUR<span>TERMINAL</span></h1></div>
+  <div class="clock" id="clock">--:--:--</div>
+  <div class="layout-toggle" id="cc-toggle">
+    <button id="btn-grid" class="active">GRID</button>
+    <button id="btn-stack">STACK</button>
+  </div>
+</header>
+
+<div class="cmdbar-wrap">
+  <div class="cmdbar">
+    <span class="caret">&gt;</span>
+    <input id="cmd-input" type="text" placeholder="Type a code — e.g. XAUUSD INTEL, GP NAS100, HELP  ·  press / to focus" autocomplete="off" spellcheck="false">
+    <span class="hint">↑↓ history · ⇥ autocomplete · / focus</span>
+  </div>
+  <div class="autocomplete" id="autocomplete"></div>
+</div>
+
+<main id="grid"></main>
+<div id="detail"></div>
+
+<footer>
+  <span id="foot-left">Tries real Yahoo Finance data every 15s per instrument — badge shows LIVE when it lands, SIM when blocked (falls back to a random walk from the last real price).</span>
+  <span>Type <b style="color:var(--amber)">HELP</b> for the function list.</span>
+</footer>
+
+<script>
+/* ================= instruments ================= */
+const INSTRUMENTS = [
+  { id:'EURUSD', name:'EUR / USD',    note:'Forex spot',            price:1.1452, digits:4, vol:0.00012, yTicker:'EURUSD=X', newsQuery:'EURUSD' },
+  { id:'GBPUSD', name:'GBP / USD',    note:'Forex spot \u00b7 EURUSD\u2019s SMT partner', price:1.2680, digits:4, vol:0.00015, yTicker:'GBPUSD=X', newsQuery:'GBPUSD' },
+  { id:'XAUUSD', name:'XAU / USD',    note:'Gold Spot',             price:3392.5, digits:2, vol:0.55,    yTicker:'XAUUSD=X', newsQuery:'Gold price' },
+  { id:'XAGUSD', name:'XAG / USD',    note:'Silver Spot \u00b7 XAUUSD\u2019s SMT partner', price:39.20,  digits:3, vol:0.09,    yTicker:'XAGUSD=X', newsQuery:'Silver price' },
+  { id:'NAS100', name:'NAS100 (CFD)', note:'proxy: NDX index',      price:25310,  digits:1, vol:6.5,     yTicker:'^NDX',     newsQuery:'Nasdaq 100' },
+  { id:'SP500',  name:'SP500 (CFD)',  note:'proxy: GSPC index',     price:6298.0, digits:1, vol:1.4,     yTicker:'^GSPC',    newsQuery:'S%26P 500' },
+];
+const byId = id => INSTRUMENTS.find(i=>i.id===id);
+
+INSTRUMENTS.forEach(inst=>{
+  inst.open = inst.price;
+  inst.hi = inst.price;
+  inst.lo = inst.price;
+  inst.history = Array.from({length:120}, ()=> inst.price);
+  inst.times = Array.from({length:120}, (_,i)=> Date.now()/1000 - (120-i)*60);
+  inst.live = false;
+  inst.lastUpdate = null;
+});
+
+/* ================= data: real fetch + sim fallback ================= */
+function fetchTick(inst){
+  const drift = (Math.random()-0.5) * inst.vol;
+  const meanRevert = (inst.open - inst.price) * 0.003;
+  inst.price = inst.price + drift + meanRevert;
+  inst.hi = Math.max(inst.hi, inst.price);
+  inst.lo = Math.min(inst.lo, inst.price);
+  inst.history.push(inst.price);
+  inst.times.push(Date.now()/1000);
+  if(inst.history.length > 180){ inst.history.shift(); inst.times.shift(); }
+}
+
+async function fetchYahoo(inst){
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(inst.yTicker)}?interval=2m&range=1d`;
+  const controller = new AbortController();
+  const t = setTimeout(()=>controller.abort(), 6000);
+  try{
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(t);
+    if(!res.ok) throw new Error('bad status ' + res.status);
+    const json = await res.json();
+    const result = json?.chart?.result?.[0];
+    if(!result) throw new Error('no result');
+    const meta = result.meta;
+    const rawCloses = result.indicators?.quote?.[0]?.close || [];
+    const rawTimes = result.timestamp || [];
+    const closes = [], times = [];
+    rawCloses.forEach((v,i)=>{ if(v!=null){ closes.push(v); times.push(rawTimes[i]); } });
+    if(closes.length < 2) throw new Error('no series');
+
+    inst.price = meta.regularMarketPrice ?? closes[closes.length-1];
+    inst.open = meta.previousClose ?? meta.chartPreviousClose ?? closes[0];
+    inst.hi = Math.max(...closes, inst.price);
+    inst.lo = Math.min(...closes, inst.price);
+    inst.history = closes.slice(-180);
+    inst.times = times.slice(-180);
+    inst.live = true;
+    inst.lastUpdate = Date.now();
+    return true;
+  }catch(err){
+    clearTimeout(t);
+    inst.live = false;
+    return false;
+  }
+}
+
+function fmt(inst, v){ return v.toLocaleString('en-US', {minimumFractionDigits:inst.digits, maximumFractionDigits:inst.digits}); }
+
+/* ================= chart drawing (shared by CC panels + GP detail) ================= */
+function drawChart(inst, canvas){
+  if(!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  if(rect.width === 0) return;
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const w = rect.width, h = rect.height;
+  ctx.clearRect(0,0,w,h);
+
+  const data = inst.history;
+  const min = Math.min(...data), max = Math.max(...data);
+  const pad = (max-min) * 0.15 || max*0.001;
+  const lo = min-pad, hi = max+pad;
+  const range = hi-lo || 1;
+
+  ctx.strokeStyle = '#171b1f';
+  ctx.lineWidth = 1;
+  for(let i=1;i<4;i++){ const y=(h/4)*i; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
+
+  const up = data[data.length-1] >= inst.open;
+  const lineColor = up ? '#26d07c' : '#ff4d5e';
+  const pts = data.map((v,i)=>({ x:(i/(data.length-1))*w, y:h-((v-lo)/range)*h }));
+
+  const grad = ctx.createLinearGradient(0,0,0,h);
+  grad.addColorStop(0, up ? 'rgba(38,208,124,0.22)' : 'rgba(255,77,94,0.22)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.beginPath(); ctx.moveTo(pts[0].x,h); pts.forEach(p=>ctx.lineTo(p.x,p.y)); ctx.lineTo(pts[pts.length-1].x,h); ctx.closePath();
+  ctx.fillStyle = grad; ctx.fill();
+
+  ctx.beginPath(); pts.forEach((p,i)=> i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y));
+  ctx.strokeStyle = lineColor; ctx.lineWidth = 1.6; ctx.stroke();
+
+  const last = pts[pts.length-1];
+  ctx.beginPath(); ctx.arc(last.x,last.y,2.8,0,Math.PI*2); ctx.fillStyle = lineColor; ctx.fill();
+
+  const openY = h - ((inst.open-lo)/range) * h;
+  ctx.setLineDash([2,3]); ctx.strokeStyle = '#3a434c';
+  ctx.beginPath(); ctx.moveTo(0,openY); ctx.lineTo(w,openY); ctx.stroke(); ctx.setLineDash([]);
+}
+
+/* ================= CC (Command Center) view ================= */
+const grid = document.getElementById('grid');
+const ccCanvases = {};
+
+function buildCC(){
+  grid.innerHTML = '';
+  INSTRUMENTS.forEach(inst=>{
+    const panel = document.createElement('div');
+    panel.className = 'panel';
+    panel.onclick = ()=> setView('INTEL', inst.id);
+    panel.innerHTML = `
+      <div class="panel-head">
+        <div>
+          <div class="sym"><span class="livedot" id="dot-${inst.id}"></span>${inst.id} <span class="badge sim" id="badge-${inst.id}">SIM</span> <span class="badge" id="scan-badge-${inst.id}" style="color:var(--muted);border-color:var(--border);cursor:pointer;" title="Click for full SCAN" onclick="event.stopPropagation(); setView('SCAN','${inst.id}')">SCAN \u2014</span></div>
+          <div class="sym-name">${inst.name}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:1px;">${inst.note}</div>
+        </div>
+        <div class="price-block">
+          <div class="price" id="price-${inst.id}">${fmt(inst, inst.price)}</div>
+          <div class="chg" id="chg-${inst.id}">+0.00 (0.00%)</div>
+        </div>
+      </div>
+      <canvas id="chart-${inst.id}"></canvas>
+      <div class="panel-foot">
+        <span>H <b id="hi-${inst.id}">${fmt(inst, inst.hi)}</b></span>
+        <span>L <b id="lo-${inst.id}">${fmt(inst, inst.lo)}</b></span>
+        <span>O <b id="op-${inst.id}">${fmt(inst, inst.open)}</b></span>
+      </div>`;
+    grid.appendChild(panel);
+    ccCanvases[inst.id] = panel.querySelector('canvas');
+  });
+}
+buildCC();
+
+function renderCC(){
+  INSTRUMENTS.forEach(inst=>{
+    document.getElementById(`price-${inst.id}`).textContent = fmt(inst, inst.price);
+    document.getElementById(`hi-${inst.id}`).textContent = fmt(inst, inst.hi);
+    document.getElementById(`lo-${inst.id}`).textContent = fmt(inst, inst.lo);
+    document.getElementById(`op-${inst.id}`).textContent = fmt(inst, inst.open);
+    const delta = inst.price - inst.open;
+    const pct = inst.open ? (delta/inst.open)*100 : 0;
+    const chgEl = document.getElementById(`chg-${inst.id}`);
+    const isUp = delta >= 0;
+    chgEl.textContent = `${isUp?'+':''}${fmt(inst, delta)} (${isUp?'+':''}${pct.toFixed(2)}%)`;
+    chgEl.className = 'chg ' + (isUp?'up':'down');
+    document.getElementById(`price-${inst.id}`).className = 'price ' + (isUp?'up':'down');
+    const badge = document.getElementById(`badge-${inst.id}`), dot = document.getElementById(`dot-${inst.id}`);
+    if(inst.live){ badge.textContent='LIVE'; badge.className='badge live'; dot.style.background='var(--green)'; }
+    else{ badge.textContent='SIM'; badge.className='badge sim'; dot.style.background='var(--amber)'; }
+    drawChart(inst, ccCanvases[inst.id]);
+  });
+  buildTape();
+}
+
+function buildTape(){
+  const tape = document.getElementById('tape');
+  const items = INSTRUMENTS.map(inst=>{
+    const delta = inst.price - inst.open;
+    const pct = inst.open ? (delta/inst.open)*100 : 0;
+    const cls = delta>=0?'up':'down'; const arrow = delta>=0?'▲':'▼';
+    return `<span class="item"><b>${inst.id}</b>${fmt(inst, inst.price)} <span class="${cls}">${arrow} ${pct.toFixed(2)}%</span></span>`;
+  }).join('');
+  tape.innerHTML = items + items;
+}
+
+document.getElementById('btn-grid').onclick = ()=>{ grid.classList.remove('stacked'); document.getElementById('btn-grid').classList.add('active'); document.getElementById('btn-stack').classList.remove('active'); setTimeout(()=>INSTRUMENTS.forEach(i=>drawChart(i, ccCanvases[i.id])),50); };
+document.getElementById('btn-stack').onclick = ()=>{ grid.classList.add('stacked'); document.getElementById('btn-stack').classList.add('active'); document.getElementById('btn-grid').classList.remove('active'); setTimeout(()=>INSTRUMENTS.forEach(i=>drawChart(i, ccCanvases[i.id])),50); };
+
+/* ================= signals engine (technical only — no fundamentals for FX/index CFDs) ================= */
+function mean(arr){ return arr.reduce((a,b)=>a+b,0)/arr.length; }
+function stdev(arr){ const m=mean(arr); return Math.sqrt(mean(arr.map(v=>(v-m)**2))); }
+
+function computeSignals(inst){
+  const h = inst.history;
+  const last = h[h.length-1];
+  const ma20 = mean(h.slice(-20));
+  const ma50 = mean(h.slice(-Math.min(50,h.length)));
+  const recent = h.slice(-10), prior = h.slice(-20,-10);
+  const momentumUp = prior.length ? mean(recent) > mean(prior) : true;
+  const rangePos = inst.hi>inst.lo ? ((last-inst.lo)/(inst.hi-inst.lo))*100 : 50;
+  const dayChangePct = inst.open ? ((last-inst.open)/inst.open)*100 : 0;
+  const returns = h.slice(1).map((v,i)=> (v-h[i])/h[i]);
+  const vol = stdev(returns) * 100;
+
+  const rows = [
+    { label:`Price vs 20-bar avg`, v: last>ma20 ? `+${(((last-ma20)/ma20)*100).toFixed(2)}%` : `${(((last-ma20)/ma20)*100).toFixed(2)}%`, call: last>ma20?'bull':'bear' },
+    { label:`Price vs 50-bar avg`, v: last>ma50 ? `+${(((last-ma50)/ma50)*100).toFixed(2)}%` : `${(((last-ma50)/ma50)*100).toFixed(2)}%`, call: last>ma50?'bull':'bear' },
+    { label:`Momentum (10-bar)`, v: momentumUp ? 'Rising' : 'Falling', call: momentumUp?'bull':'bear' },
+    { label:`Position in day range`, v: `${rangePos.toFixed(0)}%`, call: rangePos>66?'bull':rangePos<33?'bear':'neu' },
+    { label:`Change vs open`, v: `${dayChangePct>=0?'+':''}${dayChangePct.toFixed(2)}%`, call: dayChangePct>0.05?'bull':dayChangePct<-0.05?'bear':'neu' },
+  ];
+  const volRow = { label:`Realized volatility`, v: vol>0.25?'Elevated':vol>0.08?'Normal':'Low', call:'neu' };
+
+  const bull = rows.filter(r=>r.call==='bull').length;
+  const bear = rows.filter(r=>r.call==='bear').length;
+  const neu = rows.length - bull - bear;
+  let verdict = 'NEUTRAL';
+  if(bull - bear >= 2) verdict = 'BULLISH';
+  else if(bear - bull >= 2) verdict = 'BEARISH';
+  else if(bull > bear) verdict = 'LEAN BULLISH';
+  else if(bear > bull) verdict = 'LEAN BEARISH';
+
+  return { rows, volRow, bull, bear, neu, verdict };
+}
+
+/* ================= PO3: multi-timeframe candles ================= */
+// Yahoo has no native 4H interval, so we pull 1H bars and bundle every 4
+// into a 4H candle ourselves. Boundaries won't always match a broker's
+// session-aligned 4H chart, but the OHLC values are real when LIVE.
+async function fetchCandleSeries(yTicker, interval, range){
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yTicker)}?interval=${interval}&range=${range}`;
+  const controller = new AbortController();
+  const t = setTimeout(()=>controller.abort(), 8000);
+  try{
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(t);
+    if(!res.ok) throw new Error('bad status ' + res.status);
+    const json = await res.json();
+    const result = json?.chart?.result?.[0];
+    if(!result) throw new Error('no result');
+    const times = result.timestamp || [];
+    const q = result.indicators?.quote?.[0] || {};
+    const bars = [];
+    times.forEach((tm,i)=>{
+      const o=q.open?.[i], h=q.high?.[i], l=q.low?.[i], c=q.close?.[i], v=q.volume?.[i];
+      if(o!=null && h!=null && l!=null && c!=null) bars.push({ t:tm, o, h, l, c, v: v||0 });
+    });
+    if(bars.length < 2) throw new Error('empty series');
+    return bars;
+  }catch(err){
+    clearTimeout(t);
+    return null;
+  }
+}
+
+function aggregateCandles(bars, factor){
+  const out = [];
+  for(let i=0;i<bars.length;i+=factor){
+    const chunk = bars.slice(i, i+factor);
+    if(chunk.length===0) continue;
+    out.push({
+      t: chunk[0].t,
+      o: chunk[0].o,
+      c: chunk[chunk.length-1].c,
+      h: Math.max(...chunk.map(b=>b.h)),
+      l: Math.min(...chunk.map(b=>b.l)),
+      v: chunk.reduce((s,b)=> s+(b.v||0), 0),
+    });
+  }
+  return out;
+}
+
+function synthCandles(inst, n, volMult){
+  const bars = [];
+  let p = inst.price - (Math.random()-0.5) * inst.vol * volMult * 4;
+  const now = Date.now()/1000;
+  for(let i=0;i<n;i++){
+    const o = p;
+    const drift = (Math.random()-0.5) * inst.vol * volMult;
+    const c = o + drift;
+    const h = Math.max(o,c) + Math.random()*inst.vol*volMult*0.5;
+    const l = Math.min(o,c) - Math.random()*inst.vol*volMult*0.5;
+    bars.push({ t: now-(n-i)*3600, o, h, l, c, v:0 });
+    p = c;
+  }
+  return bars;
+}
+
+/* ---- generic multi-timeframe candle cache ---- */
+// factor aggregates the fetched interval up (e.g. 1m x3 -> 3m, 1H x4 -> 4H).
+// synthVol is a rough per-bar volatility multiplier used only for the SIM fallback.
+const TF_CONFIG = {
+  '30s': { fetchInterval:null,  fetchRange:null, factor:1, synthVol:3,   syntheticOnly:true },
+  '1m':  { fetchInterval:'1m',  fetchRange:'1d', factor:1, synthVol:8   },
+  '3m':  { fetchInterval:'1m',  fetchRange:'1d', factor:3, synthVol:14  },
+  '5m':  { fetchInterval:'5m',  fetchRange:'5d', factor:1, synthVol:18  },
+  '15m': { fetchInterval:'15m', fetchRange:'5d', factor:1, synthVol:30  },
+  '30m': { fetchInterval:'30m', fetchRange:'1mo',factor:1, synthVol:48  },
+  '1H':  { fetchInterval:'60m', fetchRange:'5d', factor:1, synthVol:70  },
+  '4H':  { fetchInterval:'60m', fetchRange:'5d', factor:4, synthVol:140 },
+  '1D':  { fetchInterval:'1d',  fetchRange:'6mo',factor:1, synthVol:400 },
+};
+
+function ensureTFCache(inst){ if(!inst.tf) inst.tf = {}; return inst.tf; }
+
+// Paints instantly from cache/synthetic, then upgrades in the background — never
+// blocks the first paint on a network round-trip.
+async function loadTF(inst, tf, onUpdate){
+  const cache = ensureTFCache(inst);
+  const cfg = TF_CONFIG[tf];
+  const now = Date.now();
+  if(!cache[tf]){
+    cache[tf] = { bars: synthCandles(inst, 60, cfg.synthVol), fetchedAt: 0, live:false };
+  }
+  onUpdate(cache[tf]); // instant paint
+
+  if(cfg.syntheticOnly) return; // no free seconds-level feed exists — always SIM, honestly
+  if(cache[tf].live && now - cache[tf].fetchedAt < 5*60*1000) return; // fresh live data already
+
+  let raw = null;
+  try{ raw = await fetchCandleSeries(inst.yTicker, cfg.fetchInterval, cfg.fetchRange); }
+  catch(err){ raw = null; }
+  if(raw){
+    const bars = cfg.factor > 1 ? aggregateCandles(raw, cfg.factor) : raw;
+    cache[tf] = { bars: bars.slice(-90), fetchedAt: Date.now(), live:true };
+    onUpdate(cache[tf]);
+  }else if(!cache[tf].live){
+    cache[tf] = { bars: synthCandles(inst, 60, cfg.synthVol), fetchedAt: Date.now(), live:false };
+    onUpdate(cache[tf]);
+  }
+}
+
+function drawCandles(canvas, bars, digits, levels){
+  if(!canvas || !bars || bars.length===0) return;
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  if(rect.width === 0) return;
+  canvas.width = rect.width*dpr; canvas.height = rect.height*dpr;
+  const ctx = canvas.getContext('2d'); ctx.scale(dpr,dpr);
+  const w = rect.width, h = rect.height;
+  ctx.clearRect(0,0,w,h);
+
+  const levelPrices = (levels||[]).map(l=>l.price);
+  const highs = bars.map(b=>b.h).concat(levelPrices), lows = bars.map(b=>b.l).concat(levelPrices);
+  const max = Math.max(...highs), min = Math.min(...lows);
+  const pad = (max-min)*0.10 || max*0.001;
+  const top = max+pad, bot = min-pad, range = (top-bot) || 1;
+  const slot = w / bars.length;
+  const bodyW = Math.max(2, slot*0.55);
+
+  ctx.strokeStyle = '#171b1f'; ctx.lineWidth = 1;
+  for(let i=1;i<4;i++){ const y=(h/4)*i; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
+
+  bars.forEach((b,i)=>{
+    const x = i*slot + slot/2;
+    const yO = h - ((b.o-bot)/range)*h;
+    const yC = h - ((b.c-bot)/range)*h;
+    const yH = h - ((b.h-bot)/range)*h;
+    const yL = h - ((b.l-bot)/range)*h;
+    const up = b.c >= b.o;
+    const color = up ? '#26d07c' : '#ff4d5e';
+    ctx.strokeStyle = color; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x,yH); ctx.lineTo(x,yL); ctx.stroke();
+    ctx.fillStyle = color;
+    const bodyTop = Math.min(yO,yC), bodyH = Math.max(1, Math.abs(yC-yO));
+    ctx.fillRect(x-bodyW/2, bodyTop, bodyW, bodyH);
+  });
+
+  (levels||[]).forEach(lv=>{
+    const y = h - ((lv.price-bot)/range)*h;
+    ctx.setLineDash([4,3]);
+    ctx.strokeStyle = lv.color || '#8b949e';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = lv.color || '#8b949e';
+    ctx.font = '9px monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(lv.label, w-4, Math.max(9, y-3));
+  });
+}
+
+const HTF_OPTIONS = ['4H','1H','15m'];
+const LTF_OPTIONS = ['15m','5m','3m','1m'];
+const po3State = {}; // per-ticker chosen timeframes, e.g. { EURUSD: {htf:'4H', ltf:'1m'} }
+
+function renderPO3(tickerId){
+  const inst = byId(tickerId);
+  if(!po3State[inst.id]) po3State[inst.id] = { htf:'4H', ltf:'1m' };
+  document.getElementById('detail').innerHTML = `
+    <div class="detail-head">
+      <span class="code">PO3</span>
+      <div><div class="detail-title">${inst.id}</div><div class="detail-sub">Top-down: HTF for bias/draw on liquidity, LTF for entry timing. Reading AMD phases is on you.</div></div>
+      ${backLink()}
+    </div>
+    <div id="po3-body"></div>`;
+  paintPO3Shell(inst);
+}
+
+function tfChips(instId, group, options, active){
+  return `<div style="display:flex;gap:6px;margin-bottom:8px;">${options.map(tf=>
+    `<button class="tf-chip" data-inst="${instId}" data-group="${group}" data-tf="${tf}" style="background:${tf===active?'var(--amber)':'var(--panel)'};color:${tf===active?'#000':'var(--muted)'};border:1px solid ${tf===active?'var(--amber)':'var(--border)'};font-family:var(--mono);font-size:11px;padding:4px 10px;cursor:pointer;letter-spacing:.5px;">${tf}</button>`
+  ).join('')}</div>`;
+}
+
+function paintPO3Shell(inst){
+  const body = document.getElementById('po3-body');
+  if(!body) return;
+  const st = po3State[inst.id];
+  body.innerHTML = `
+    <div style="font-size:11px;color:var(--muted);letter-spacing:1px;margin-bottom:4px;">HTF — BIAS</div>
+    ${tfChips(inst.id,'htf',HTF_OPTIONS,st.htf)}
+    <div class="gp-wrap" style="margin-bottom:20px;">
+      <div style="display:flex;justify-content:space-between;"><span style="font-size:10px;color:var(--muted);">${inst.id} · ${st.htf}</span><span class="badge sim" id="po3-htf-badge">SIM</span></div>
+      <canvas class="gp-canvas" id="po3-htf" style="height:200px;margin-top:6px;"></canvas>
+      <div class="gp-stats" id="po3-htf-stats"></div>
+    </div>
+    <div style="font-size:11px;color:var(--muted);letter-spacing:1px;margin-bottom:4px;">LTF — ENTRY</div>
+    ${tfChips(inst.id,'ltf',LTF_OPTIONS,st.ltf)}
+    <div class="gp-wrap">
+      <div style="display:flex;justify-content:space-between;"><span style="font-size:10px;color:var(--muted);">${inst.id} · ${st.ltf}</span><span class="badge sim" id="po3-ltf-badge">SIM</span></div>
+      <canvas class="gp-canvas" id="po3-ltf" style="height:200px;margin-top:6px;"></canvas>
+      <div class="gp-stats" id="po3-ltf-stats"></div>
+    </div>
+    <div class="help-note">3m/4H aren't native feeds — 3m bundles three 1m bars, 4H bundles four 1H bars, so edges won't line up exactly with a broker's chart. Click a timeframe chip to switch either panel independently.</div>`;
+
+  body.querySelectorAll('.tf-chip').forEach(btn=>{
+    btn.onclick = ()=>{
+      const g = btn.dataset.group, tf = btn.dataset.tf;
+      po3State[inst.id][g] = tf;
+      paintPO3Shell(inst); // repaint chips active state + reload that slot
+    };
+  });
+
+  paintPO3Slot(inst, 'htf', st.htf);
+  paintPO3Slot(inst, 'ltf', st.ltf);
+}
+
+function paintPO3Slot(inst, group, tf){
+  loadTF(inst, tf, (entry)=>{
+    if(view.code!=='PO3' || view.ticker!==inst.id) return;
+    if(po3State[inst.id][group] !== tf) return; // user switched away before this resolved
+    const canvas = document.getElementById(`po3-${group}`);
+    const statsEl = document.getElementById(`po3-${group}-stats`);
+    const badgeEl = document.getElementById(`po3-${group}-badge`);
+    if(!canvas || !entry.bars.length) return;
+    const last = entry.bars[entry.bars.length-1];
+    if(badgeEl){ badgeEl.textContent = entry.live?'LIVE':'SIM'; badgeEl.className = 'badge ' + (entry.live?'live':'sim'); }
+    if(statsEl){ statsEl.innerHTML = `<span>O <b>${fmt(inst,last.o)}</b></span><span>H <b>${fmt(inst,last.h)}</b></span><span>L <b>${fmt(inst,last.l)}</b></span><span>C <b>${fmt(inst,last.c)}</b></span><span>Range <b>${fmt(inst,last.h-last.l)}</b></span>`; }
+    try{ drawCandles(canvas, entry.bars.slice(-30), inst.digits); }catch(err){}
+  });
+}
+
+/* ================= shared pivot / structure detection ================= */
+function findPivots(bars, lookback=2){
+  const highs = [], lows = [];
+  for(let i=lookback; i<bars.length-lookback; i++){
+    const win = bars.slice(i-lookback, i+lookback+1);
+    if(bars[i].h === Math.max(...win.map(b=>b.h))) highs.push({ i, price:bars[i].h, t:bars[i].t });
+    if(bars[i].l === Math.min(...win.map(b=>b.l))) lows.push({ i, price:bars[i].l, t:bars[i].t });
+  }
+  return { highs, lows };
+}
+
+function clusterLevels(points, tolerancePct){
+  const sorted = [...points].sort((a,b)=>a.price-b.price);
+  const clusters = [];
+  sorted.forEach(p=>{
+    const last = clusters[clusters.length-1];
+    if(last && Math.abs(p.price-last.avg)/last.avg <= tolerancePct){
+      last.points.push(p); last.avg = mean(last.points.map(x=>x.price));
+    }else{
+      clusters.push({ points:[p], avg:p.price });
+    }
+  });
+  return clusters.filter(c=>c.points.length>=2); // "equal" highs/lows need 2+ touches
+}
+
+/* ================= SCAN: confluence scorecard ================= */
+// Encodes the user's own 4H/1H range-read rules + standard ICT building
+// blocks (MSS/BOS, FVG, OB, IFVG, OTE) into one scored read. Heuristic —
+// swing-break + last-opposite-candle detection, not exact manual annotation.
+
+// Trend from the last two swing highs/lows: HH+HL = bullish, LH+LL = bearish.
+// Correlated pairs, used for both the SMT command's default pairing and the
+// auto-included SMT check inside SCAN. NAS100/SP500 (equity indices),
+// EURUSD/GBPUSD (both anti-dollar majors), XAUUSD/XAGUSD (metals) — real
+// correlated pairs, not a forced substitute.
+const SMT_PARTNER = { NAS100:'SP500', SP500:'NAS100', EURUSD:'GBPUSD', GBPUSD:'EURUSD', XAUUSD:'XAGUSD', XAGUSD:'XAUUSD' };
+
+// Shared swing-divergence check: compares the last two pivots of the same
+// kind (high/high or low/low) between two instruments.
+function readDivergence(pivotsA, pivotsB, idA, idB, kind){
+  if(pivotsA.length<2 || pivotsB.length<2) return { text:'Not enough swing points yet', flag:false };
+  const a1=pivotsA[pivotsA.length-2], a2=pivotsA[pivotsA.length-1];
+  const b1=pivotsB[pivotsB.length-2], b2=pivotsB[pivotsB.length-1];
+  const aUp = a2.price > a1.price, bUp = b2.price > b1.price;
+  if(aUp !== bUp) return { text: `${idA} printed a ${aUp?'higher':'lower'} ${kind}, ${idB} printed a ${bUp?'higher':'lower'} ${kind} \u2014 that's a divergence`, flag:true, aUp, bUp };
+  return { text: `Both printed a ${aUp?'higher':'lower'} ${kind} \u2014 no divergence here`, flag:false, aUp, bUp };
+}
+
+function structureTrend(bars, lookback=2){
+  const { highs, lows } = findPivots(bars, lookback);
+  if(highs.length<2 || lows.length<2) return { bias:'NEUTRAL', reason:'not enough swing structure yet' };
+  const h = highs.slice(-2), l = lows.slice(-2);
+  const higherHigh = h[1].price > h[0].price;
+  const higherLow  = l[1].price > l[0].price;
+  if(higherHigh && higherLow) return { bias:'BULLISH', reason:'higher high + higher low' };
+  if(!higherHigh && !higherLow) return { bias:'BEARISH', reason:'lower high + lower low' };
+  return { bias:'NEUTRAL', reason:'mixed — no clean HH/HL or LH/LL yet' };
+}
+
+// Most recent close beyond a prior pivot. Labeled BOS if it agrees with the
+// reference trend, MSS if it's the first break against it.
+function lastBreak(bars, refTrend, lookback=2){
+  const { highs, lows } = findPivots(bars, lookback);
+  if(!highs.length || !lows.length) return null;
+  const lastHigh = highs[highs.length-1], lastLow = lows[lows.length-1];
+  const brokeHigh = bars.slice(lastHigh.i+1).some(b=> b.c > lastHigh.price);
+  const brokeLow  = bars.slice(lastLow.i+1).some(b=> b.c < lastLow.price);
+  if(brokeHigh && (!brokeLow || lastHigh.i >= lastLow.i)){
+    return { dir:'BULLISH', kind: refTrend==='BEARISH' ? 'MSS' : 'BOS', level:lastHigh.price };
+  }
+  if(brokeLow && (!brokeHigh || lastLow.i >= lastHigh.i)){
+    return { dir:'BEARISH', kind: refTrend==='BULLISH' ? 'MSS' : 'BOS', level:lastLow.price };
+  }
+  return null;
+}
+
+// 3-candle fair value gaps. Marks filled (wicked back through) vs inversed
+// (closed clean through the far edge — IFVG, now the opposite polarity).
+function findFVGs(bars, maxCount=6){
+  const out = [];
+  for(let i=2;i<bars.length;i++){
+    const a=bars[i-2], c=bars[i];
+    if(a.h < c.l) out.push({ i, dir:'BULLISH', top:c.l, bottom:a.h });
+    else if(a.l > c.h) out.push({ i, dir:'BEARISH', top:a.l, bottom:c.h });
+  }
+  out.forEach(g=>{
+    const after = bars.slice(g.i+1);
+    if(g.dir==='BULLISH'){
+      g.filled   = after.some(b=> b.l <= g.bottom);
+      g.inversed = after.some(b=> b.c <  g.bottom);
+    }else{
+      g.filled   = after.some(b=> b.h >= g.top);
+      g.inversed = after.some(b=> b.c >  g.top);
+    }
+  });
+  return out.slice(-maxCount);
+}
+
+// Order block heuristic: last opposite-colored candle before the impulse
+// that broke a swing high (bullish OB) or swing low (bearish OB).
+function findOrderBlocks(bars, pivots){
+  const { highs, lows } = pivots;
+  const obs = [];
+  highs.forEach(h=>{
+    const breakIdx = bars.findIndex((b,idx)=> idx>h.i && b.c>h.price);
+    if(breakIdx<0) return;
+    for(let j=breakIdx-1; j>=Math.max(0,breakIdx-5); j--){
+      if(bars[j].c < bars[j].o){ obs.push({ i:j, type:'BULLISH OB', top:bars[j].h, bottom:bars[j].l }); break; }
+    }
+  });
+  lows.forEach(l=>{
+    const breakIdx = bars.findIndex((b,idx)=> idx>l.i && b.c<l.price);
+    if(breakIdx<0) return;
+    for(let j=breakIdx-1; j>=Math.max(0,breakIdx-5); j--){
+      if(bars[j].c > bars[j].o){ obs.push({ i:j, type:'BEARISH OB', top:bars[j].h, bottom:bars[j].l }); break; }
+    }
+  });
+  return obs.sort((a,b)=>a.i-b.i);
+}
+
+// OTE = 61.8%-79% retracement of the most recent swing leg.
+function computeOTE(pivots){
+  const { highs, lows } = pivots;
+  if(!highs.length || !lows.length) return null;
+  const lastHigh = highs[highs.length-1], lastLow = lows[lows.length-1];
+  const range = lastHigh.price - lastLow.price;
+  if(range<=0) return null;
+  if(lastHigh.i > lastLow.i){ // most recent leg ran low -> high
+    return { dir:'BULLISH', top: lastHigh.price - range*0.618, bottom: lastHigh.price - range*0.79 };
+  }
+  return { dir:'BEARISH', top: lastLow.price + range*0.79, bottom: lastLow.price + range*0.618 };
+}
+
+// Your 3-way 4H/1H range read: NESTED (1H inside 4H box), ALIGNED (trending
+// together, one side clustered), or EXPANDED (1H already outside on both
+// sides — the "avoid" case).
+// Your 4H/1H range read, done properly both ways:
+//  - NESTED: 1H fully inside the 4H box -> breakout either side, retest, target the opposite 4H extreme
+//  - ALIGNED-UP / ALIGNED-DOWN: highs (or lows) riding together -> break the near 1H level, then the 4H level, with trend
+//  - SHIFTED-UP / SHIFTED-DOWN: 1H has already run past the 4H box on one side while staying inside on the other -> avoid-leaning, mark the two combined extremes
+//  - EXPANDED: 1H has run past the 4H box on BOTH sides -> no clean box left, worst read of the six
+function classifyRange(bars4h, bars1h){
+  if(bars4h.length<2 || bars1h.length<2) return null;
+  const ref4h = bars4h[bars4h.length-2]; // last fully-closed 4H bar
+  const t0 = ref4h.t, t1 = bars4h[bars4h.length-1].t;
+  const within = bars1h.filter(b=> b.t!=null && b.t>=t0 && b.t<t1);
+  const use1h = within.length ? within : bars1h.slice(-4);
+  const h4=ref4h.h, l4=ref4h.l;
+  const h1=Math.max(...use1h.map(b=>b.h)), l1=Math.min(...use1h.map(b=>b.l));
+  const tol = (h4-l4)*0.03 || h4*0.0005;
+
+  const hCmp = Math.abs(h1-h4)<=tol ? 0 : (h1>h4 ? 1 : -1); // 1H high vs 4H high
+  const lCmp = Math.abs(l1-l4)<=tol ? 0 : (l1>l4 ? 1 : -1); // 1H low vs 4H low
+
+  let type, note;
+  if(hCmp>0 && lCmp<0){
+    type='EXPANDED';
+    note="1H has pushed beyond the 4H box on BOTH sides — no clean box left at all. Lowest-quality read of the six; if you trade it anyway, retest-rejection is doing all the work, not the box.";
+  }else if(hCmp>0){ // hCmp=1, lCmp is 0 or 1
+    type='SHIFTED-UP';
+    note="1H has already broken above the 4H high while its low still sits above (or at) the 4H low — the 4H box is running stale to the upside. Lower-quality read; if you trade it, use the 1H high and 4H low as your two extremes, trend-dependent, and retest-rejection matters more here, not less.";
+  }else if(lCmp<0){ // hCmp is -1 or 0, lCmp=-1
+    type='SHIFTED-DOWN';
+    note="1H has already broken below the 4H low while its high still sits below (or at) the 4H high — the 4H box is running stale to the downside. Vice versa of the shifted-up case: use the 1H low and 4H high as your two extremes, trend-dependent, retest-rejection still matters more here.";
+  }else if(hCmp===0 && lCmp>0){
+    type='ALIGNED-UP';
+    note='4H and 1H are trending up together — the highs are riding close to the same level. Break the near 1H high first, then look for continuation through the 4H high, staying with the trend.';
+  }else if(hCmp<0 && lCmp===0){
+    type='ALIGNED-DOWN';
+    note='4H and 1H are trending down together — the lows are riding close to the same level. Break the near 1H low first, then look for continuation through the 4H low, staying with the trend.';
+  }else{
+    type='NESTED';
+    note='1H range sits inside the 4H box. Wait for a break of either 1H extreme, then a retest + rejection of that level, before targeting the opposite 4H extreme.';
+  }
+  return { type, note, h4, l4, h1, l1 };
+}
+
+function scoreSetup({ trend4h, break1h, range, ote, fvgs, obs, smt, price, instId }){
+  const bias = break1h ? break1h.dir : (trend4h.bias!=='NEUTRAL' ? trend4h.bias : null);
+  if(!bias) return { score:0, bias:null, label:'NO READ', notes:['Not enough clean structure yet on either timeframe.'], withTrend:false };
+  let score = 0; const notes = [];
+  const withTrend = trend4h.bias!=='NEUTRAL' && trend4h.bias===bias;
+  if(withTrend){ score+=25; notes.push('With the 4H trend (+25)'); }
+  else if(trend4h.bias!=='NEUTRAL'){ score-=20; notes.push('Countertrend vs 4H — this is your ~3W/7L bucket (\u221220)'); }
+  if(range){
+    if(range.type==='NESTED'){ score+=20; notes.push('Nested 1H-in-4H range — clean breakout+retest structure (+20)'); }
+    else if(range.type==='ALIGNED-UP' || range.type==='ALIGNED-DOWN'){ score+=15; notes.push(`Aligned/trending range (${range.type}) (+15)`); }
+    else if(range.type==='SHIFTED-UP' || range.type==='SHIFTED-DOWN'){ score-=10; notes.push(`Shifted range (${range.type}) — 4H box running stale on one side, avoid-leaning (\u221210)`); }
+    else{ score-=15; notes.push('Expanded range on both sides — no clean box left, avoid-leaning (\u221215)'); }
+  }
+  if(ote && ote.dir===bias){
+    const inZone = price<=Math.max(ote.top,ote.bottom) && price>=Math.min(ote.top,ote.bottom);
+    if(inZone){ score+=15; notes.push('Price is inside the OTE 61.8\u201379% zone (+15)'); }
+  }
+  const dirFVGs = (fvgs||[]).filter(g=> g.dir===bias && !g.filled);
+  if(dirFVGs.length){ score+=10; notes.push(`${dirFVGs.length} unfilled ${bias.toLowerCase()} FVG in your direction (+10)`); }
+  const invFVGs = (fvgs||[]).filter(g=> g.inversed);
+  if(invFVGs.length){ score+=10; notes.push(`${invFVGs.length} inversed FVG (IFVG) on the chart — reversal marker (+10)`); }
+  if((obs||[]).length){ score+=10; notes.push(`${obs.length} order block(s) mapped on this leg (+10)`); }
+  if(smt){
+    const bullSMT = bias==='BULLISH' && smt.lowDiv && smt.lowDiv.flag && smt.lowDiv.aUp===false && smt.lowDiv.bUp===true;
+    const bearSMT = bias==='BEARISH' && smt.highDiv && smt.highDiv.flag && smt.highDiv.aUp===true && smt.highDiv.bUp===false;
+    if(bullSMT){ score+=10; notes.push(`SMT divergence vs ${smt.partnerId} on the low — ${instId} weaker there, bullish tell (+10)`); }
+    else if(bearSMT){ score+=10; notes.push(`SMT divergence vs ${smt.partnerId} on the high — ${instId} stronger there, bearish tell (+10)`); }
+  }
+  score = Math.max(0, Math.min(100, score));
+  const label = score>=70?'STRONG':score>=45?'MODERATE':score>=20?'WEAK':'AVOID';
+  return { score, bias, label, notes, withTrend };
+}
+
+// "When to BE" — a rule of thumb, not a guarantee, tied to which of your
+// setups this actually is.
+function beGuidance(result, range){
+  if(!result.bias) return 'No clean bias yet — nothing to manage.';
+  if(!result.withTrend) return "Countertrend entry: this is the bucket you're losing ~7 of 10 in. If you take it anyway, don't give it room — BE the moment price closes back through the breakout level, or at 1x your stop, whichever comes first. Scalp it, don't marry it.";
+  if(range && range.type==='NESTED') return "With-trend + nested range: don't rush BE off the first tick in your favor — this range type tends to wick back through the entry candle before continuing. Hold the stop until price closes through the broken 1H level on a 1H candle, or hits 1:1, whichever is later — then move to BE.";
+  if(range && range.type==='EXPANDED') return "Expanded range = the least-defined target structure of the six. Move to BE as soon as you're up anything meaningful (even 0.5x) — there's no clean opposite extreme left to aim for.";
+  if(range && (range.type==='SHIFTED-UP' || range.type==='SHIFTED-DOWN')) return `Shifted range (${range.type}): the 4H box is already stale on one side, so your target is a marked extreme, not a clean opposite wall. Treat it like the expanded case — BE early, once you're up anything meaningful, and don't wait for a full 1:1 that may not have room to happen.`;
+  return 'With-trend, aligned range: let the retest of the near level hold before moving to BE — a clean close back through it invalidates the setup anyway, so BE on that close.';
+}
+
+// Pure bundle — no DOM — so both the SCAN detail view and the background
+// CC-badge/alert scanner run the exact same read.
+function computeScan(inst, bars4, bars1, partnerBars1){
+  const pivots1  = findPivots(bars1, 2);
+  const trend4h  = structureTrend(bars4, 2);
+  const break1h  = lastBreak(bars1, trend4h.bias, 2);
+  const range    = classifyRange(bars4, bars1);
+  const ote      = computeOTE(pivots1);
+  const fvgs     = findFVGs(bars1, 6);
+  const obs      = findOrderBlocks(bars1, pivots1);
+  const partnerId = SMT_PARTNER[inst.id];
+  let smt = null;
+  if(partnerId && partnerBars1 && partnerBars1.length>=6){
+    const pivotsP = findPivots(partnerBars1, 2);
+    smt = {
+      partnerId,
+      highDiv: readDivergence(pivots1.highs, pivotsP.highs, inst.id, partnerId, 'high'),
+      lowDiv:  readDivergence(pivots1.lows,  pivotsP.lows,  inst.id, partnerId, 'low'),
+    };
+  }
+  const result   = scoreSetup({ trend4h, break1h, range, ote, fvgs, obs, smt, price: inst.price, instId: inst.id });
+  return { trend4h, break1h, range, ote, fvgs, obs, smt, result };
+}
+
+/* ---- background scanner: keeps every instrument's SCAN fresh for the CC
+   badge + STRONG-crossover alerts, independent of which view is open ---- */
+const scanCache = {};   // instId -> { trend4h, break1h, range, ote, fvgs, obs, result, updatedAt }
+let SCAN_EVENTS = [];   // session log of STRONG transitions, most recent first
+
+function paintScanBadge(inst){
+  const el = document.getElementById(`scan-badge-${inst.id}`);
+  if(!el) return;
+  const c = scanCache[inst.id];
+  if(!c || !c.result || !c.result.bias){ el.textContent = 'SCAN \u2014'; el.style.color = 'var(--muted)'; el.style.borderColor = 'var(--border)'; return; }
+  const r = c.result;
+  const color = r.label==='AVOID' ? 'var(--muted)' : r.label==='STRONG' ? (r.bias==='BULLISH'?'var(--green)':'var(--red)') : 'var(--amber)';
+  el.textContent = `SCAN ${r.score} ${r.bias==='BULLISH'?'\u25b2':r.bias==='BEARISH'?'\u25bc':''}`;
+  el.style.color = color; el.style.borderColor = color;
+  el.title = `${r.label} \u00b7 ${r.notes[0]||''}`;
+  if(view.code==='WS') workspace.filter(p=>p.kind==='SCAN' && p.ticker===inst.id).forEach(paintWorkspacePanel);
+}
+
+// Only these fire toast+beep+log when they cross into STRONG. The rest (SP500,
+// GBPUSD, XAGUSD) still get background-scanned every ~3min for the CC badge
+// and to feed SMT — they just don't interrupt you, since they're confluence-only.
+const SCAN_ALERT_WATCHLIST = ['XAUUSD', 'NAS100', 'EURUSD'];
+
+function fireScanAlert(inst, result){
+  showToast(`\u26a1 SCAN: ${inst.id} just went STRONG ${result.bias} (${result.score}/100)`);
+  beep();
+  SCAN_EVENTS.unshift({ id: Date.now()+Math.random(), instId: inst.id, bias: result.bias, score: result.score, t: Date.now() });
+  SCAN_EVENTS = SCAN_EVENTS.slice(0, 20);
+  if(view.code==='ALERT') paintScanEvents();
+}
+
+function refreshScanCache(inst){
+  const state = {};
+  const partnerId = SMT_PARTNER[inst.id];
+  const partner = partnerId ? byId(partnerId) : null;
+  const finish = ()=>{
+    if(!state.h4 || !state.h1) return;
+    if(partner && !state.p1) return;
+    const bars4 = state.h4.bars, bars1 = state.h1.bars;
+    if(bars4.length<6 || bars1.length<6) return;
+    const bundle = computeScan(inst, bars4, bars1, state.p1 ? state.p1.bars : null);
+    const prevLabel = scanCache[inst.id] ? scanCache[inst.id].result.label : null;
+    scanCache[inst.id] = { ...bundle, updatedAt: Date.now() };
+    paintScanBadge(inst);
+    if(SCAN_ALERT_WATCHLIST.includes(inst.id) && bundle.result.label==='STRONG' && prevLabel!=='STRONG') fireScanAlert(inst, bundle.result);
+  };
+  loadTF(inst, '4H', e=>{ state.h4=e; finish(); });
+  loadTF(inst, '1H', e=>{ state.h1=e; finish(); });
+  if(partner) loadTF(partner, '1H', e=>{ state.p1=e; finish(); });
+}
+
+async function renderSCAN(tickerId){
+  const inst = byId(tickerId);
+  const partnerId = SMT_PARTNER[inst.id];
+  const partner = partnerId ? byId(partnerId) : null;
+  document.getElementById('detail').innerHTML = `
+    <div class="detail-head"><span class="code">SCAN</span>
+      <div><div class="detail-title">${inst.id} Confluence Scan</div><div class="detail-sub">4H/1H range read \u00b7 MSS/BOS \u00b7 FVG/OB/IFVG \u00b7 OTE \u00b7 SMT vs ${partnerId||'\u2014'} \u00b7 scored against your own rules</div></div>
+      ${backLink()}
+    </div>
+    <div id="scan-body"><div class="help-note">Loading 4H + 1H structure\u2026</div></div>`;
+  const state = {};
+  const maybeRun = ()=>{ if(state.h4 && state.h1 && (!partner || state.p1)) paintSCAN(inst, state.h4, state.h1, state.p1); };
+  loadTF(inst, '4H', e=>{ state.h4=e; maybeRun(); });
+  loadTF(inst, '1H', e=>{ state.h1=e; maybeRun(); });
+  if(partner) loadTF(partner, '1H', e=>{ state.p1=e; maybeRun(); });
+}
+
+function paintSCAN(inst, h4entry, h1entry, p1entry){
+  if(view.code!=='SCAN' || view.ticker!==inst.id) return;
+  const body = document.getElementById('scan-body');
+  if(!body) return;
+  const bars4 = h4entry.bars, bars1 = h1entry.bars;
+  if(bars4.length<6 || bars1.length<6){ body.innerHTML = '<div class="help-note">Not enough bars yet\u2026</div>'; return; }
+
+  const { trend4h, break1h, range, ote, fvgs, obs, smt, result } = computeScan(inst, bars4, bars1, p1entry ? p1entry.bars : null);
+  const price = inst.price;
+  const be      = beGuidance(result, range);
+  const dirColor = result.bias==='BULLISH' ? 'var(--green)' : result.bias==='BEARISH' ? 'var(--red)' : 'var(--muted)';
+
+  // keep the CC badge + alert engine in sync with whatever this view just computed
+  const prevLabel = scanCache[inst.id] ? scanCache[inst.id].result.label : null;
+  scanCache[inst.id] = { trend4h, break1h, range, ote, fvgs, obs, smt, result, updatedAt: Date.now() };
+  paintScanBadge(inst);
+  if(SCAN_ALERT_WATCHLIST.includes(inst.id) && result.label==='STRONG' && prevLabel!=='STRONG') fireScanAlert(inst, result);
+
+  const levels = [];
+  if(range){
+    levels.push({price:range.h4, label:'4H HIGH', color:'#ffb000'});
+    levels.push({price:range.l4, label:'4H LOW',  color:'#ffb000'});
+    levels.push({price:range.h1, label:'1H HIGH', color:'#5c9eff'});
+    levels.push({price:range.l1, label:'1H LOW',  color:'#5c9eff'});
+  }
+  if(ote){ levels.push({price:ote.top, label:'OTE 61.8', color:'#c264ff'}); levels.push({price:ote.bottom, label:'OTE 79', color:'#c264ff'}); }
+
+  body.innerHTML = `
+    <div class="intel-verdict" style="border-color:${dirColor};">
+      <div><div class="label">BIAS</div><div class="call" style="color:${dirColor};font-size:20px;">${result.bias||'NO READ'} \u00b7 ${result.label}</div></div>
+      <div style="text-align:right;margin-left:auto;"><div class="label">SCORE</div><div class="call" style="font-size:20px;">${result.score}/100</div></div>
+    </div>
+    <div style="margin:-4px 0 16px;">${gaugeBarHTML(result.bias==='BEARISH' ? -result.score : result.score)}</div>
+
+    <div class="intel-grid" style="grid-template-columns:1fr 1fr;margin-bottom:16px;">
+      <div class="intel-card"><h3>4H TREND</h3>
+        <div class="intel-row"><i class="dot ${trend4h.bias==='BULLISH'?'dot-bull':trend4h.bias==='BEARISH'?'dot-bear':'dot-neu'}"></i>${trend4h.bias}</div>
+        <div class="intel-row" style="color:var(--muted);font-size:11px;">${trend4h.reason}</div>
+      </div>
+      <div class="intel-card"><h3>1H STRUCTURE BREAK</h3>
+        ${break1h ? `<div class="intel-row"><i class="dot ${break1h.dir==='BULLISH'?'dot-bull':'dot-bear'}"></i>${break1h.kind} <b style="margin-left:auto;">${break1h.dir}</b></div>` : '<div class="intel-row" style="color:var(--muted);">No break yet</div>'}
+      </div>
+    </div>
+
+    <div class="intel-card" style="margin-bottom:16px;">
+      <h3>RANGE READ \u2014 ${range?range.type:'\u2014'}</h3>
+      <div style="font-size:12px;color:var(--text);margin:6px 0;line-height:1.5;">${range?range.note:'Not enough bars to define the box.'}</div>
+      ${range ? `<div style="display:flex;gap:20px;font-size:11px;color:var(--muted);flex-wrap:wrap;margin-top:4px;">
+        <span>4H&nbsp; H <b style="color:var(--text)">${fmt(inst,range.h4)}</b> / L <b style="color:var(--text)">${fmt(inst,range.l4)}</b></span>
+        <span>1H&nbsp; H <b style="color:var(--text)">${fmt(inst,range.h1)}</b> / L <b style="color:var(--text)">${fmt(inst,range.l1)}</b></span>
+      </div>` : ''}
+    </div>
+
+    <div class="intel-card" style="margin-bottom:16px;">
+      <h3>OTE ZONE ${ote?('\u00b7 '+ote.dir):''}</h3>
+      ${ote ? `<div style="font-size:12px;color:var(--text);">${fmt(inst,ote.bottom)} \u2014 ${fmt(inst,ote.top)} <span style="color:var(--muted);">(61.8%\u201379% of the last ${ote.dir==='BULLISH'?'up':'down'} leg)</span></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px;">Current price is ${(price<=Math.max(ote.top,ote.bottom) && price>=Math.min(ote.top,ote.bottom))?'INSIDE':'outside'} the zone.</div>`
+      : '<div style="font-size:12px;color:var(--muted);">Not enough swing structure yet to define a leg.</div>'}
+    </div>
+
+    <div class="intel-card" style="margin-bottom:16px;">
+      <h3>SMT DIVERGENCE ${smt?('vs '+smt.partnerId):''}</h3>
+      ${smt ? `
+        <div class="intel-row"><i class="dot ${smt.highDiv.flag?'dot-bear':'dot-neu'}"></i>${smt.highDiv.text}</div>
+        <div class="intel-row"><i class="dot ${smt.lowDiv.flag?'dot-bull':'dot-neu'}"></i>${smt.lowDiv.text}</div>
+      ` : '<div style="font-size:12px;color:var(--muted);">No correlated partner tracked, or not enough bars yet.</div>'}
+    </div>
+
+    <div class="intel-grid" style="grid-template-columns:1fr 1fr;margin-bottom:16px;">
+      <div class="intel-card"><h3>FVG (1H)</h3>
+        ${fvgs.length? fvgs.slice(-4).reverse().map(g=>`<div class="intel-row"><i class="dot ${g.dir==='BULLISH'?'dot-bull':'dot-bear'}"></i>${g.dir}${g.inversed?' \u00b7 IFVG':g.filled?' \u00b7 filled':''}<b style="margin-left:auto;">${fmt(inst,g.bottom)}\u2013${fmt(inst,g.top)}</b></div>`).join('') : '<div class="intel-row" style="color:var(--muted);">None found</div>'}
+      </div>
+      <div class="intel-card"><h3>ORDER BLOCKS (1H)</h3>
+        ${obs.length? obs.slice(-4).reverse().map(o=>`<div class="intel-row"><i class="dot ${o.type.includes('BULLISH')?'dot-bull':'dot-bear'}"></i>${o.type}<b style="margin-left:auto;">${fmt(inst,o.bottom)}\u2013${fmt(inst,o.top)}</b></div>`).join('') : '<div class="intel-row" style="color:var(--muted);">None found</div>'}
+      </div>
+    </div>
+
+    <div class="intel-card" style="margin-bottom:16px;">
+      <h3>WHY THIS SCORE</h3>
+      ${result.notes.map(n=>`<div class="intel-row" style="color:var(--text);font-size:12px;">${n}</div>`).join('') || '<div class="intel-row" style="color:var(--muted);">\u2014</div>'}
+    </div>
+
+    <div class="intel-card" style="margin-bottom:16px;border-color:var(--amber-dim);">
+      <h3 style="color:var(--amber);">WHEN TO BE</h3>
+      <div style="font-size:12px;color:var(--text);line-height:1.5;">${be}</div>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;"><span style="font-size:10px;color:var(--muted);">${inst.id} \u00b7 1H, last 60 bars</span><span class="badge ${h1entry.live?'live':'sim'}">${h1entry.live?'LIVE':'SIM'}</span></div>
+    <div class="gp-wrap" style="margin-top:6px;"><canvas class="gp-canvas" id="scan-chart" style="height:280px;"></canvas></div>
+
+    <div class="help-note">This scores YOUR stated rules \u2014 nested/aligned/expanded 4H\u20131H range, trend alignment, OTE tap, FVG/OB/IFVG presence \u2014 against the current bars. MSS/BOS/OB detection are heuristics (swing-break + last-opposite-candle), not manual annotation, and will occasionally disagree with how you'd draw it by eye. Treat this as a second pair of eyes for confluence, not a signal to auto-follow. Not financial advice.</div>`;
+
+  requestAnimationFrame(()=>{
+    try{ drawCandles(document.getElementById('scan-chart'), bars1.slice(-60), inst.digits, levels); }catch(err){}
+  });
+}
+
+/* ================= LIQ ================= */
+async function renderLIQ(tickerId){
+  const inst = byId(tickerId);
+  document.getElementById('detail').innerHTML = `
+    <div class="detail-head"><span class="code">LIQ</span>
+      <div><div class="detail-title">${inst.id}</div><div class="detail-sub">Prior-day/week extremes + equal highs/lows (untapped liquidity pools)</div></div>
+      ${backLink()}
+    </div>
+    <div id="liq-body"></div>`;
+  await loadTF(inst, '1H', (entry)=> paintLIQ(inst, entry));
+}
+
+function paintLIQ(inst, hourlyEntry){
+  if(view.code!=='LIQ' || view.ticker!==inst.id) return;
+  const body = document.getElementById('liq-body');
+  if(!body) return;
+  const bars = hourlyEntry.bars;
+
+  // group hourly bars into calendar days (UTC) to derive PDH/PDL and week groups
+  const byDay = {};
+  bars.forEach(b=>{
+    if(b.t==null) return;
+    const key = new Date(b.t*1000).toISOString().slice(0,10);
+    (byDay[key] = byDay[key] || []).push(b);
+  });
+  const dayKeys = Object.keys(byDay).sort();
+  const prevDayKey = dayKeys[dayKeys.length-2];
+  const prevDay = prevDayKey ? byDay[prevDayKey] : null;
+  const pdh = prevDay ? Math.max(...prevDay.map(b=>b.h)) : null;
+  const pdl = prevDay ? Math.min(...prevDay.map(b=>b.l)) : null;
+
+  function weekKey(t){
+    const d = new Date(t*1000);
+    const day = (d.getUTCDay()+6)%7;
+    const monday = new Date(d); monday.setUTCDate(d.getUTCDate()-day); monday.setUTCHours(0,0,0,0);
+    return monday.toISOString().slice(0,10);
+  }
+  const byWeek = {};
+  bars.forEach(b=>{ if(b.t==null) return; const k=weekKey(b.t); (byWeek[k]=byWeek[k]||[]).push(b); });
+  const weekKeys = Object.keys(byWeek).sort();
+  const prevWeekKey = weekKeys[weekKeys.length-2];
+  const prevWeek = prevWeekKey ? byWeek[prevWeekKey] : null;
+  const pwh = prevWeek ? Math.max(...prevWeek.map(b=>b.h)) : null;
+  const pwl = prevWeek ? Math.min(...prevWeek.map(b=>b.l)) : null;
+
+  const { highs, lows } = findPivots(bars, 2);
+  const tolerance = 0.0006; // ~0.06% clustering tolerance for "equal" levels
+  const bslPools = clusterLevels(highs, tolerance).filter(c=>c.avg > inst.price); // buy-side liquidity, resting above price
+  const sslPools = clusterLevels(lows, tolerance).filter(c=>c.avg < inst.price);  // sell-side liquidity, resting below price
+  const nearestBSL = bslPools.sort((a,b)=>a.avg-b.avg)[0];
+  const nearestSSL = sslPools.sort((a,b)=>b.avg-a.avg)[0];
+
+  // True Day Open (00:00 NY) and Weekly Open (Monday 00:00 NY) — ICT reference
+  // points. Grouped by actual NY calendar date/week, not UTC, since that's
+  // what "midnight open" means in this framework.
+  function nyDateStr(t){
+    const p = new Intl.DateTimeFormat('en-US',{ timeZone:'America/New_York', year:'numeric', month:'2-digit', day:'2-digit' }).formatToParts(new Date(t*1000));
+    const g = k => p.find(x=>x.type===k).value;
+    return `${g('year')}-${g('month')}-${g('day')}`;
+  }
+  const todayNY = nyDateStr(Date.now()/1000);
+  const todaysBars = bars.filter(b=> b.t!=null && nyDateStr(b.t)===todayNY).sort((x,y)=>x.t-y.t);
+  const tdo = todaysBars.length ? todaysBars[0].o : null;
+
+  function nyWeekKey(t){
+    const p = new Intl.DateTimeFormat('en-US',{ timeZone:'America/New_York', year:'numeric', month:'2-digit', day:'2-digit' }).formatToParts(new Date(t*1000));
+    const g = k => p.find(x=>x.type===k).value;
+    const d = new Date(Date.UTC(+g('year'), +g('month')-1, +g('day')));
+    const day = (d.getUTCDay()+6)%7;
+    d.setUTCDate(d.getUTCDate()-day);
+    return d.toISOString().slice(0,10);
+  }
+  const thisWeekNY = nyWeekKey(Date.now()/1000);
+  const weekBars = bars.filter(b=> b.t!=null && nyWeekKey(b.t)===thisWeekNY).sort((x,y)=>x.t-y.t);
+  const wo = weekBars.length ? weekBars[0].o : null;
+
+  const levels = [];
+  if(pdh) levels.push({ price:pdh, label:'PDH', color:'#ff4d5e' });
+  if(pdl) levels.push({ price:pdl, label:'PDL', color:'#26d07c' });
+  if(pwh) levels.push({ price:pwh, label:'PWH', color:'#ffb000' });
+  if(pwl) levels.push({ price:pwl, label:'PWL', color:'#ffb000' });
+  if(tdo) levels.push({ price:tdo, label:'TDO', color:'#5c9eff' });
+  if(wo)  levels.push({ price:wo,  label:'WO',  color:'#5c9eff' });
+  if(nearestBSL) levels.push({ price:nearestBSL.avg, label:`BSL x${nearestBSL.points.length}`, color:'#5c6773' });
+  if(nearestSSL) levels.push({ price:nearestSSL.avg, label:`SSL x${nearestSSL.points.length}`, color:'#5c6773' });
+
+  body.innerHTML = `
+    <div class="intel-grid" style="margin-bottom:16px;">
+      <div class="intel-card"><h3>PRIOR DAY</h3>
+        <div class="intel-row"><i class="dot dot-bear"></i>PDH <b style="margin-left:auto">${pdh?fmt(inst,pdh):'—'}</b></div>
+        <div class="intel-row"><i class="dot dot-bull"></i>PDL <b style="margin-left:auto">${pdl?fmt(inst,pdl):'—'}</b></div>
+        <div class="intel-row"><i class="dot dot-neu"></i>True Day Open <b style="margin-left:auto">${tdo?fmt(inst,tdo):'—'}</b></div>
+      </div>
+      <div class="intel-card"><h3>PRIOR WEEK</h3>
+        <div class="intel-row"><i class="dot dot-neu"></i>PWH <b style="margin-left:auto">${pwh?fmt(inst,pwh):'—'}</b></div>
+        <div class="intel-row"><i class="dot dot-neu"></i>PWL <b style="margin-left:auto">${pwl?fmt(inst,pwl):'—'}</b></div>
+        <div class="intel-row"><i class="dot dot-neu"></i>Weekly Open <b style="margin-left:auto">${wo?fmt(inst,wo):'—'}</b></div>
+      </div>
+      <div class="intel-card"><h3>NEAREST POOLS</h3>
+        <div class="intel-row"><i class="dot dot-neu"></i>BSL above <b style="margin-left:auto">${nearestBSL?fmt(inst,nearestBSL.avg):'none found'}</b></div>
+        <div class="intel-row"><i class="dot dot-neu"></i>SSL below <b style="margin-left:auto">${nearestSSL?fmt(inst,nearestSSL.avg):'none found'}</b></div>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:space-between;"><span style="font-size:10px;color:var(--muted);">${inst.id} · 1H, last 60 bars</span><span class="badge ${hourlyEntry.live?'live':'sim'}">${hourlyEntry.live?'LIVE':'SIM'}</span></div>
+    <div class="gp-wrap" style="margin-top:6px;"><canvas class="gp-canvas" id="liq-chart" style="height:280px;"></canvas></div>
+    <div class="help-note">BSL/SSL = buy-side / sell-side liquidity: price levels touched twice or more (equal highs/lows) that haven't been swept yet, clustered within ~0.06%. TDO/WO = true day/week open (00:00 NY), a common ICT reference point. PDH/PDL/PWH/PWL from calendar-day/week grouping of hourly bars — a level list, not a signal.</div>`;
+  requestAnimationFrame(()=>{
+    try{ drawCandles(document.getElementById('liq-chart'), bars.slice(-60), inst.digits, levels); }catch(err){}
+  });
+}
+
+/* ================= RISK: position-size calculator ================= */
+// Pure arithmetic tool, not advice. EURUSD/XAUUSD contract sizes (100,000
+// units / 100oz per standard lot) are near-universal across retail brokers.
+// Index CFD contract size (NAS100/SP500) is NOT standardized — it varies a
+// lot broker to broker, so that default is a placeholder you must override
+// from your own broker's contract specification page.
+const RISK_DEFAULTS = {
+  EURUSD: { contractSize: 100000, stopDistance: 0.0025, standard:true,  unitNote:'units per standard lot — standard across retail FX brokers' },
+  GBPUSD: { contractSize: 100000, stopDistance: 0.0025, standard:true,  unitNote:'units per standard lot — standard across retail FX brokers' },
+  XAUUSD: { contractSize: 100,    stopDistance: 3.5,     standard:true,  unitNote:'oz per standard lot — standard across most brokers' },
+  XAGUSD: { contractSize: 5000,   stopDistance: 0.35,    standard:true,  unitNote:'oz per standard lot — 5,000oz is the standard silver lot size, unlike gold\u2019s 100oz' },
+  NAS100: { contractSize: 1,      stopDistance: 25,      standard:false, unitNote:'$ per point per lot — VARIES BY BROKER, check your contract specs' },
+  SP500:  { contractSize: 1,      stopDistance: 8,       standard:false, unitNote:'$ per point per lot — VARIES BY BROKER, check your contract specs' },
+};
+
+function renderRISK(tickerId){
+  const inst = byId(tickerId) || byId('EURUSD');
+  const d = RISK_DEFAULTS[inst.id];
+  document.getElementById('detail').innerHTML = `
+    <div class="detail-head"><span class="code">RISK</span>
+      <div><div class="detail-title">${inst.id} Position Size</div><div class="detail-sub">A calculator based on the numbers you enter — not a recommendation</div></div>
+      ${backLink()}
+    </div>
+    <div class="gp-wrap" style="max-width:520px;">
+      <div class="risk-field"><label>Account size ($)</label><input type="number" id="risk-account" value="10000" step="100"></div>
+      <div class="risk-field"><label>Risk per trade (%)</label><input type="number" id="risk-pct" value="1" step="0.1"></div>
+      <div class="risk-field"><label>Direction</label>
+        <select id="risk-dir"><option value="long">Long</option><option value="short">Short</option></select>
+      </div>
+      <div class="risk-field"><label>Entry price</label><input type="number" id="risk-entry" value="${inst.price}" step="any"></div>
+      <div class="risk-field"><label>Stop distance (price units, e.g. ${d.stopDistance})</label><input type="number" id="risk-stop" value="${d.stopDistance}" step="any"></div>
+      <div class="risk-field"><label>Contract size per lot ${d.standard?'':'⚠️'}</label><input type="number" id="risk-contract" value="${d.contractSize}" step="any"></div>
+      <div style="font-size:10px;color:${d.standard?'var(--muted)':'var(--amber)'};margin:-8px 0 14px;">${d.unitNote}</div>
+      <div id="risk-output"></div>
+    </div>
+    <div class="help-note">This is arithmetic on whatever you type in — it doesn't know your actual broker's contract specs, spread, or margin rules. ${d.standard?'':('For '+inst.id+" the contract-size default is a placeholder — pull the real number from your broker's contract specification page before sizing a real trade.")} Not financial advice.</div>`;
+
+  ['risk-account','risk-pct','risk-dir','risk-entry','risk-stop','risk-contract'].forEach(id=>{
+    document.getElementById(id).addEventListener('input', ()=> paintRisk(inst));
+  });
+  paintRisk(inst);
+}
+
+function paintRisk(inst){
+  const num = id => parseFloat(document.getElementById(id).value) || 0;
+  const account = num('risk-account');
+  const riskPct = num('risk-pct');
+  const entry = num('risk-entry');
+  const stop = num('risk-stop');
+  const contract = num('risk-contract');
+  const dir = document.getElementById('risk-dir').value;
+
+  const riskAmount = account * (riskPct/100);
+  const lots = (stop>0 && contract>0) ? riskAmount / (stop*contract) : 0;
+  const units = lots * contract;
+  const sign = dir==='long' ? 1 : -1;
+  const stopPrice = entry - sign*stop;
+
+  const rows = [1,2,3].map(r=>{
+    const targetPrice = entry + sign*stop*r;
+    return `<div class="intel-row">${r}R target <b style="margin-left:auto">${targetPrice.toFixed(6).replace(/0+$/,'').replace(/\\.$/,'')} &nbsp;(+$${(riskAmount*r).toFixed(2)})</b></div>`;
+  }).join('');
+
+  document.getElementById('risk-output').innerHTML = `
+    <div class="intel-grid" style="grid-template-columns:1fr 1fr;margin-top:6px;">
+      <div class="intel-card"><h3>POSITION</h3>
+        <div class="intel-row">Risking <b style="margin-left:auto">$${riskAmount.toFixed(2)}</b></div>
+        <div class="intel-row">Position size <b style="margin-left:auto">${lots.toFixed(2)} lots</b></div>
+        <div class="intel-row">Units/contracts <b style="margin-left:auto">${units.toLocaleString('en-US',{maximumFractionDigits:0})}</b></div>
+        <div class="intel-row">Stop price <b style="margin-left:auto">${stopPrice}</b></div>
+      </div>
+      <div class="intel-card"><h3>REWARD (SAME R AS RISK)</h3>${rows}</div>
+    </div>`;
+}
+
+
+/* ================= ALERT: price alerts (flash + beep on level cross) ================= */
+// Alerts persist via window.storage where available (falls back to in-memory
+// only if storage isn't present) and are checked every tick regardless of
+// which view is open — the whole point is they fire in the background.
+let ALERTS = [];
+let alertsLoaded = false;
+
+async function loadAlerts(){
+  try{
+    if(window.storage){
+      const res = await window.storage.get('alerts', false);
+      if(res && res.value) ALERTS = JSON.parse(res.value);
+    }
+  }catch(err){ /* no saved alerts yet, or storage unavailable — start empty */ }
+  alertsLoaded = true;
+  if(view.code==='ALERT') paintAlertList();
+}
+async function saveAlerts(){
+  try{ if(window.storage) await window.storage.set('alerts', JSON.stringify(ALERTS), false); }
+  catch(err){ /* best-effort — alerts still work for this session even if this fails */ }
+}
+
+function addAlert(instId, price, label){
+  ALERTS.push({ id: Date.now()+Math.random(), instId, price, label: label||'', fired:false, lastSide:null });
+  saveAlerts();
+  if(view.code==='ALERT') paintAlertList();
+}
+function removeAlert(id){
+  ALERTS = ALERTS.filter(a=>a.id!==id);
+  saveAlerts();
+  if(view.code==='ALERT') paintAlertList();
+}
+
+let audioCtx = null;
+function beep(){
+  try{
+    audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)();
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.frequency.value = 880; o.connect(g); g.connect(audioCtx.destination);
+    g.gain.setValueAtTime(0.15, audioCtx.currentTime);
+    o.start(); o.stop(audioCtx.currentTime+0.18);
+  }catch(err){ /* autoplay-blocked or unsupported — the visual toast still fires */ }
+}
+function showToast(text){
+  const t = document.createElement('div');
+  t.textContent = text;
+  t.style.cssText = 'position:fixed;top:44px;right:18px;background:var(--amber);color:#000;padding:10px 16px;font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.5px;z-index:999;box-shadow:0 4px 16px rgba(0,0,0,.5);';
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(), 6000);
+}
+
+function checkAlerts(){
+  if(!alertsLoaded) return;
+  let changed = false;
+  ALERTS.forEach(a=>{
+    if(a.fired) return;
+    const inst = byId(a.instId);
+    if(!inst) return;
+    const side = inst.price >= a.price ? 'above' : 'below';
+    if(a.lastSide==null){ a.lastSide = side; return; } // just establishing baseline, no false-fire on load
+    if(side !== a.lastSide){
+      a.fired = true; changed = true;
+      showToast(`⚡ ${a.instId} crossed ${fmt(inst,a.price)}${a.label?' — '+a.label:''}`);
+      beep();
+    }
+    a.lastSide = side;
+  });
+  if(changed) saveAlerts();
+  if(view.code==='ALERT') paintAlertList();
+}
+
+function renderALERT(){
+  document.getElementById('detail').innerHTML = `
+    <div class="detail-head"><span class="code">ALERT</span>
+      <div><div class="detail-title">Price Alerts</div><div class="detail-sub">Checked every ~1s in the background, no matter which view is open — flashes + beeps when crossed</div></div>
+      ${backLink()}
+    </div>
+    <div class="gp-wrap" style="max-width:520px;margin-bottom:16px;">
+      <div class="risk-field"><label>Instrument</label>
+        <select id="alert-inst">${INSTRUMENTS.map(i=>`<option value="${i.id}">${i.id}</option>`).join('')}</select>
+      </div>
+      <div class="risk-field"><label>Price level</label><input type="number" id="alert-price" step="any"></div>
+      <div class="risk-field"><label>Note (optional)</label><input type="text" id="alert-label" placeholder="e.g. PDH, killzone entry level"></div>
+      <button id="alert-add-btn" style="background:var(--amber);color:#000;border:none;font-family:var(--mono);font-weight:600;padding:8px 16px;cursor:pointer;letter-spacing:.5px;">ADD ALERT</button>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+        ${INSTRUMENTS.map(i=>`<button class="quick-alert" data-inst="${i.id}" data-kind="hi" style="font-family:var(--mono);font-size:10px;background:var(--panel);border:1px solid var(--border);color:var(--muted);padding:4px 8px;cursor:pointer;">+ ${i.id} session high</button><button class="quick-alert" data-inst="${i.id}" data-kind="lo" style="font-family:var(--mono);font-size:10px;background:var(--panel);border:1px solid var(--border);color:var(--muted);padding:4px 8px;cursor:pointer;">+ ${i.id} session low</button>`).join('')}
+      </div>
+    </div>
+    <div id="alert-list"></div>
+
+    <div style="margin-top:24px;font-size:11px;color:var(--muted);letter-spacing:1.5px;margin-bottom:8px;">SCAN ALERTS \u2014 fires when any instrument crosses into STRONG</div>
+    <div id="scan-alert-list"></div>
+    <div class="help-note" style="margin-top:10px;">Every tracked instrument is background-scanned (4H+1H, same read as <b style="color:var(--amber)">SCAN</b>) roughly every 3 minutes for the CC badge and SMT. But only <b style="color:var(--text)">XAUUSD, NAS100, EURUSD</b> fire the flash+beep here when they cross into STRONG — GBPUSD, XAGUSD, and SP500 are confluence-only (they feed the SMT check) and stay silent by design. Session-only — clears on reload, doesn't persist like price alerts.</div>
+
+    <div style="margin-top:24px;font-size:11px;color:var(--muted);letter-spacing:1.5px;margin-bottom:8px;">PHONE PUSH \u2014 works even with this app closed, laptop off</div>
+    <div class="gp-wrap" style="max-width:560px;">
+      <div id="push-status" style="font-size:12px;color:var(--muted);margin-bottom:10px;">Checking status\u2026</div>
+      <button id="push-enable-btn" style="background:var(--amber);color:#000;border:none;font-family:var(--mono);font-weight:600;padding:8px 16px;cursor:pointer;letter-spacing:.5px;">ENABLE PHONE ALERTS</button>
+      <div id="push-sub-box" style="display:none;margin-top:14px;">
+        <div style="font-size:11px;color:var(--text);margin-bottom:6px;">Subscribed. One-time step: copy this into your GitHub repo's <b style="color:var(--amber)">PUSH_SUBSCRIPTION</b> secret (see the ict-scan-alerts README) so the background scanner can actually reach this device.</div>
+        <textarea id="push-sub-json" readonly style="width:100%;height:110px;background:#000;border:1px solid var(--border);color:var(--green);font-family:var(--mono);font-size:10px;padding:8px;resize:vertical;"></textarea>
+        <button id="push-copy-btn" style="margin-top:8px;background:var(--panel-hi);color:var(--text);border:1px solid var(--border);font-family:var(--mono);font-size:11px;padding:6px 12px;cursor:pointer;">COPY</button>
+      </div>
+    </div>
+    <div class="help-note" style="margin-top:10px;">This button subscribes <b style="color:var(--text)">this installed app</b> to Web Push. The actual scanning still runs on GitHub's schedule (the <b style="color:var(--amber)">ict-scan-alerts</b> repo), independent of this device — it sends the notification here whenever it fires. Re-installing the app or clearing site data means re-subscribing and updating the secret again.</div>`;
+
+  initPushUI();
+
+  document.getElementById('alert-add-btn').onclick = ()=>{
+    const instId = document.getElementById('alert-inst').value;
+    const price = parseFloat(document.getElementById('alert-price').value);
+    const label = document.getElementById('alert-label').value;
+    if(!isFinite(price)) return;
+    addAlert(instId, price, label);
+    document.getElementById('alert-price').value = '';
+    document.getElementById('alert-label').value = '';
+  };
+  document.querySelectorAll('.quick-alert').forEach(btn=>{
+    btn.onclick = ()=>{
+      const inst = byId(btn.dataset.inst);
+      const price = btn.dataset.kind==='hi' ? inst.hi : inst.lo;
+      addAlert(inst.id, price, `session ${btn.dataset.kind==='hi'?'high':'low'} at add-time`);
+    };
+  });
+  paintAlertList();
+  paintScanEvents();
+}
+
+function paintScanEvents(){
+  const el = document.getElementById('scan-alert-list');
+  if(!el) return;
+  if(SCAN_EVENTS.length===0){ el.innerHTML = '<div class="help-note" style="margin-top:0;">None fired yet this session.</div>'; return; }
+  el.innerHTML = SCAN_EVENTS.map(e=>{
+    const color = e.bias==='BULLISH' ? 'var(--green)' : 'var(--red)';
+    return `<div class="panel" style="cursor:pointer;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;min-height:auto;" onclick="setView('SCAN','${e.instId}')">
+      <div>
+        <div style="font-size:13px;"><b style="color:${color}">${e.instId} \u00b7 ${e.bias}</b> <span class="badge" style="border-color:${color};color:${color};margin-left:6px;">STRONG ${e.score}</span></div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px;">${new Date(e.t).toLocaleTimeString()}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function paintAlertList(){
+  const el = document.getElementById('alert-list');
+  if(!el) return;
+  if(ALERTS.length===0){ el.innerHTML = `<div class="help-note">No alerts yet — add one above, or use a quick-add button.</div>`; return; }
+  el.innerHTML = ALERTS.slice().reverse().map(a=>{
+    const inst = byId(a.instId);
+    const dist = inst ? (inst.price - a.price) : 0;
+    return `<div class="panel" style="cursor:default;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;min-height:auto;">
+      <div>
+        <div style="font-size:13px;"><b style="color:var(--amber)">${a.instId}</b> @ ${inst?fmt(inst,a.price):a.price} ${a.fired?'<span class="badge sim" style="border-color:var(--muted);color:var(--muted);">FIRED</span>':''}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px;">${a.label||'—'} ${inst&&!a.fired?`&middot; ${dist>=0?'':'+' }${fmt(inst,Math.abs(dist))} away`:''}</div>
+      </div>
+      <button data-id="${a.id}" class="alert-remove" style="background:none;border:1px solid var(--border);color:var(--muted);font-family:var(--mono);font-size:11px;padding:4px 8px;cursor:pointer;">REMOVE</button>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('.alert-remove').forEach(btn=> btn.onclick = ()=> removeAlert(parseFloat(btn.dataset.id)));
+}
+
+/* ================= WS: multi-panel workspace ================= */
+// Pin several small panels side by side (QR, INTEL, SCAN, CHART) instead of
+// being locked to one full-page view at a time. Layout persists across
+// reloads via window.storage, same pattern as ALERTS.
+let workspace = [];
+let wsLoaded = false;
+let wsSeq = 0;
+const WS_CHART_TFS = ['30s','1m','3m','5m','15m','30m','1H','4H','1D'];
+
+async function loadWorkspace(){
+  try{
+    if(window.storage){
+      const res = await window.storage.get('workspace', false);
+      if(res && res.value) workspace = JSON.parse(res.value);
+    }
+  }catch(err){ /* no saved layout yet, or storage unavailable — start empty */ }
+  wsLoaded = true;
+  wsSeq = workspace.reduce((m,p)=> Math.max(m, p.seq||0), 0);
+  if(view.code==='WS') paintWorkspace();
+}
+async function saveWorkspace(){
+  try{ if(window.storage) await window.storage.set('workspace', JSON.stringify(workspace), false); }
+  catch(err){ /* best-effort — layout still works this session even if this fails */ }
+}
+
+function addWorkspacePanel(kind, tickerId){
+  if(!byId(tickerId)) return;
+  wsSeq++;
+  workspace.push({ id:'wp'+wsSeq, seq:wsSeq, kind, ticker:tickerId, tf: kind==='CHART' ? '1H' : null });
+  saveWorkspace();
+  paintWorkspace();
+}
+function removeWorkspacePanel(id){
+  workspace = workspace.filter(p=>p.id!==id);
+  saveWorkspace();
+  paintWorkspace();
+}
+
+function renderWorkspace(){
+  document.getElementById('detail').innerHTML = `
+    <div class="detail-head"><span class="code">WS</span>
+      <div><div class="detail-title">Workspace</div><div class="detail-sub">Pin QR / INTEL / SCAN / CHART panels side by side — add and close as you go, layout is saved automatically</div></div>
+      ${backLink()}
+    </div>
+    <div class="gp-wrap" style="max-width:560px;margin-bottom:16px;">
+      <div class="risk-field"><label>Panel type</label>
+        <select id="ws-kind">
+          <option value="QR">QR — big quote</option>
+          <option value="INTEL">INTEL — signal scorecard</option>
+          <option value="SCAN">SCAN — confluence score</option>
+          <option value="CHART">CHART — candles, every timeframe incl. 30s</option>
+        </select>
+      </div>
+      <div class="risk-field"><label>Instrument</label>
+        <select id="ws-inst">${INSTRUMENTS.map(i=>`<option value="${i.id}">${i.id}</option>`).join('')}</select>
+      </div>
+      <button id="ws-add-btn" style="background:var(--amber);color:#000;border:none;font-family:var(--mono);font-weight:600;padding:8px 16px;cursor:pointer;letter-spacing:.5px;">+ ADD PANEL</button>
+    </div>
+    <div id="ws-grid" class="ws-grid"></div>
+    <div class="help-note">Try pinning <b style="color:var(--amber)">SCAN</b> + <b style="color:var(--amber)">QR</b> for the same ticker, or a couple of <b style="color:var(--amber)">CHART</b> panels on different timeframes side by side. <b style="color:var(--text)">30s has no free real-time feed anywhere</b> — it's always SIM, marked honestly rather than faked as live.</div>`;
+  document.getElementById('ws-add-btn').onclick = ()=>{
+    addWorkspacePanel(document.getElementById('ws-kind').value, document.getElementById('ws-inst').value);
+  };
+  paintWorkspace();
+}
+
+function paintWorkspace(){
+  if(view.code!=='WS') return;
+  const grid = document.getElementById('ws-grid');
+  if(!grid) return;
+  if(!wsLoaded){ grid.innerHTML = '<div class="help-note" style="margin:0;">Loading your saved layout\u2026</div>'; return; }
+  if(workspace.length===0){ grid.innerHTML = '<div class="help-note" style="margin:0;">No panels pinned yet — add one above.</div>'; return; }
+  grid.innerHTML = workspace.map(p=>{
+    const inst = byId(p.ticker);
+    return `<div class="ws-panel" id="ws-card-${p.id}">
+      <div class="ws-panel-head">
+        <span>${p.kind} \u00b7 ${inst?inst.id:'?'}</span>
+        <button class="ws-close" data-id="${p.id}" title="Close panel">\u2715</button>
+      </div>
+      <div class="ws-panel-body" id="ws-body-${p.id}"></div>
+    </div>`;
+  }).join('');
+  grid.querySelectorAll('.ws-close').forEach(btn=> btn.onclick = ()=> removeWorkspacePanel(btn.dataset.id));
+  workspace.forEach(paintWorkspacePanel);
+}
+
+function tickWorkspace(){
+  if(view.code!=='WS') return;
+  workspace.forEach(p=>{
+    if(p.kind!=='QR' && p.kind!=='INTEL') return;
+    if(byId(p.ticker)) paintWorkspacePanel(p);
+  });
+}
+
+function paintWorkspacePanel(p){
+  const inst = byId(p.ticker);
+  const body = document.getElementById(`ws-body-${p.id}`);
+  if(!inst || !body) return;
+  if(p.kind==='QR') paintWsQR(inst, body);
+  else if(p.kind==='INTEL') paintWsIntel(inst, body);
+  else if(p.kind==='SCAN') paintWsScan(inst, body);
+  else if(p.kind==='CHART') paintWsChart(p, inst, body);
+}
+
+function paintWsQR(inst, body){
+  const delta = inst.price - inst.open, pct = inst.open ? (delta/inst.open)*100 : 0, up = delta>=0;
+  body.innerHTML = `
+    <div style="text-align:center;">
+      <div style="font-size:10px;color:var(--muted);letter-spacing:1px;">${inst.name} <span class="badge ${inst.live?'live':'sim'}" style="margin-left:4px;">${inst.live?'LIVE':'SIM'}</span></div>
+      <div style="font-size:30px;font-weight:700;font-variant-numeric:tabular-nums;color:${up?'var(--green)':'var(--red)'};margin:6px 0;">${fmt(inst,inst.price)}</div>
+      <div style="font-size:12px;color:${up?'var(--green)':'var(--red)'};">${up?'+':''}${fmt(inst,delta)} (${up?'+':''}${pct.toFixed(2)}%)</div>
+      <div style="display:flex;justify-content:center;gap:16px;font-size:11px;color:var(--muted);margin-top:10px;">
+        <span>H <b style="color:var(--text)">${fmt(inst,inst.hi)}</b></span>
+        <span>L <b style="color:var(--text)">${fmt(inst,inst.lo)}</b></span>
+      </div>
+    </div>`;
+}
+
+function paintWsIntel(inst, body){
+  const s = computeSignals(inst);
+  const color = s.verdict.includes('BULL') ? 'var(--green)' : s.verdict.includes('BEAR') ? 'var(--red)' : 'var(--muted)';
+  body.innerHTML = `
+    <div style="text-align:center;">
+      <div style="font-size:10px;color:var(--muted);letter-spacing:1px;">${inst.id}</div>
+      <div style="font-size:17px;font-weight:700;color:${color};margin-top:4px;">${s.verdict}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px;">${s.bull} bullish \u00b7 ${s.bear} bearish \u00b7 ${s.neu} neutral</div>
+    </div>`;
+}
+
+function paintWsScan(inst, body){
+  const c = scanCache[inst.id];
+  if(!c || !c.result || !c.result.bias){ body.innerHTML = '<div class="help-note" style="margin:0;">Scanning\u2026</div>'; return; }
+  const r = c.result;
+  const color = r.label==='AVOID' ? 'var(--muted)' : r.label==='STRONG' ? (r.bias==='BULLISH'?'var(--green)':'var(--red)') : 'var(--amber)';
+  body.innerHTML = `
+    <div style="text-align:center;cursor:pointer;" onclick="setView('SCAN','${inst.id}')" title="Open full SCAN">
+      <div style="font-size:10px;color:var(--muted);letter-spacing:1px;">${inst.id} \u00b7 ${c.range?c.range.type:'\u2014'}</div>
+      <div style="font-size:17px;font-weight:700;color:${color};margin-top:4px;">${r.bias} \u00b7 ${r.label}</div>
+      <div style="font-size:22px;font-weight:700;margin-top:2px;">${r.score}<span style="font-size:12px;color:var(--muted);">/100</span></div>
+    </div>`;
+}
+
+function paintWsChart(p, inst, body){
+  body.innerHTML = `
+    <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;">${WS_CHART_TFS.map(tf=>
+      `<button class="ws-tf-chip" data-id="${p.id}" data-tf="${tf}" style="background:${tf===p.tf?'var(--amber)':'var(--panel-hi)'};color:${tf===p.tf?'#000':'var(--muted)'};border:1px solid ${tf===p.tf?'var(--amber)':'var(--border)'};font-size:10px;padding:3px 7px;cursor:pointer;">${tf}</button>`
+    ).join('')}</div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+      <span style="font-size:10px;color:var(--muted);">${inst.id} \u00b7 ${p.tf}</span>
+      <span class="badge sim" id="ws-badge-${p.id}">SIM</span>
+    </div>
+    <canvas id="ws-canvas-${p.id}" style="width:100%;height:180px;display:block;"></canvas>`;
+  body.querySelectorAll('.ws-tf-chip').forEach(btn=>{
+    btn.onclick = ()=>{
+      const item = workspace.find(x=>x.id===btn.dataset.id);
+      if(!item) return;
+      item.tf = btn.dataset.tf;
+      saveWorkspace();
+      paintWorkspacePanel(item);
+    };
+  });
+  loadTF(inst, p.tf, entry=>{
+    if(view.code!=='WS' || !document.getElementById(`ws-canvas-${p.id}`)) return;
+    const badge = document.getElementById(`ws-badge-${p.id}`);
+    if(badge){ badge.textContent = entry.live?'LIVE':'SIM'; badge.className = 'badge ' + (entry.live?'live':'sim'); }
+    try{ drawCandles(document.getElementById(`ws-canvas-${p.id}`), entry.bars.slice(-40), inst.digits); }catch(err){}
+  });
+}
+
+
+// This is a price-action proxy — close position within each bar's range,
+// volume-weighted where Yahoo actually supplies volume (mostly the index
+// proxies; forex/spot tickers rarely carry real volume). It is NOT real
+// order flow. True order flow (bid/ask delta, footprint, DOM) needs Level 2
+// data from a broker or paid feed — nothing free gives a browser that.
+const FLOW_TFS = ['1m','5m','15m','1H','4H'];
+
+/* ================= FLOW: buyer/seller pressure by timeframe ================= */
+function computePressure(bars){
+  if(!bars || bars.length===0) return { score:0, label:'Balanced', weighted:false };
+  const hasVolume = bars.some(b=> b.v && b.v>0);
+  let score;
+  if(hasVolume){
+    let num=0, den=0;
+    bars.forEach(b=>{
+      if(b.h===b.l) return;
+      const clv = ((b.c-b.l)-(b.h-b.c))/(b.h-b.l);
+      num += clv*(b.v||0); den += (b.v||0);
+    });
+    score = den>0 ? (num/den)*100 : 0;
+  }else{
+    const clvs = bars.filter(b=>b.h>b.l).map(b=> ((b.c-b.l)-(b.h-b.c))/(b.h-b.l));
+    score = clvs.length ? mean(clvs)*100 : 0;
+  }
+  score = Math.max(-100, Math.min(100, score));
+  let label;
+  if(score>=40) label='Buyers heavy';
+  else if(score>=15) label='Buyers lean';
+  else if(score<=-40) label='Sellers heavy';
+  else if(score<=-15) label='Sellers lean';
+  else label='Balanced';
+  return { score, label, weighted:hasVolume };
+}
+
+function gaugeBarHTML(score){
+  const clamped = Math.max(-100, Math.min(100, score));
+  const pct = (clamped+100)/2;
+  const color = clamped>15 ? 'var(--green)' : clamped<-15 ? 'var(--red)' : 'var(--muted)';
+  const left = clamped>=0 ? 50 : pct;
+  const width = Math.abs(pct-50);
+  return `<div style="position:relative;height:8px;background:#171b1f;border-radius:2px;">
+    <div style="position:absolute;top:0;bottom:0;left:${left}%;width:${width}%;background:${color};border-radius:2px;"></div>
+    <div style="position:absolute;left:50%;top:-3px;bottom:-3px;width:1px;background:var(--border);"></div>
+  </div>`;
+}
+
+function flowRowHTML(tf){
+  return `<div class="intel-card" style="margin-bottom:10px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <h3 style="margin:0;">${tf}</h3>
+      <span class="badge sim" id="flow-badge-${tf}">SIM</span>
+    </div>
+    <div id="flow-gauge-${tf}">${gaugeBarHTML(0)}</div>
+    <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;">
+      <span id="flow-label-${tf}" style="color:var(--muted);">Loading…</span>
+      <span id="flow-score-${tf}" style="color:var(--muted);">—</span>
+    </div>
+  </div>`;
+}
+
+function renderFLOW(tickerId){
+  const inst = byId(tickerId);
+  const scores = {};
+  document.getElementById('detail').innerHTML = `
+    <div class="detail-head"><span class="code">FLOW</span>
+      <div><div class="detail-title">${inst.id}</div><div class="detail-sub">Buyer/seller pressure across timeframes — for spotting confluence</div></div>
+      ${backLink()}
+    </div>
+    <div class="intel-verdict" id="flow-confluence"><div><div class="label">CONFLUENCE</div><div class="call" style="color:var(--muted);font-size:18px;">Loading…</div></div></div>
+    ${FLOW_TFS.map(flowRowHTML).join('')}
+    <div class="help-note">Price-action proxy: where each candle closes within its own range, volume-weighted on timeframes/instruments where Yahoo actually supplies volume (mostly the index proxies — NAS100/SP500 — rarely FX/spot). <b style="color:var(--text)">This is not real order flow.</b> True order flow (bid/ask delta, footprint, depth of market) needs Level 2 data from a broker or a paid feed (Rithmic, CQG, your broker's own API) — nothing free can hand a browser-based tool that. Static snapshot: reissue <b style="color:var(--amber)">FLOW ${inst.id}</b> to refresh.</div>`;
+
+  FLOW_TFS.forEach(tf=>{
+    loadTF(inst, tf, entry=>{
+      if(view.code!=='FLOW' || view.ticker!==inst.id) return;
+      const p = computePressure(entry.bars.slice(-20));
+      scores[tf] = p.score;
+      paintFlowRow(tf, p, entry.live);
+      paintConfluence(scores);
+    });
+  });
+}
+
+function paintFlowRow(tf, p, live){
+  const badge = document.getElementById(`flow-badge-${tf}`);
+  const gauge = document.getElementById(`flow-gauge-${tf}`);
+  const label = document.getElementById(`flow-label-${tf}`);
+  const scoreEl = document.getElementById(`flow-score-${tf}`);
+  if(badge){ badge.textContent = live?'LIVE':'SIM'; badge.className = 'badge ' + (live?'live':'sim'); }
+  if(gauge) gauge.innerHTML = gaugeBarHTML(p.score);
+  if(label){
+    label.textContent = p.label + (p.weighted ? ' · volume-weighted' : ' · price-action only');
+    label.style.color = p.score>15?'var(--green)':p.score<-15?'var(--red)':'var(--muted)';
+  }
+  if(scoreEl) scoreEl.textContent = (p.score>=0?'+':'') + p.score.toFixed(0);
+}
+
+function paintConfluence(scores){
+  const vals = Object.values(scores);
+  if(vals.length < FLOW_TFS.length) return; // wait for all timeframes to report at least once
+  const el = document.getElementById('flow-confluence');
+  if(!el) return;
+  const bull = vals.filter(v=>v>15).length, bear = vals.filter(v=>v<-15).length;
+  let text, color;
+  if(bull===vals.length){ text='ALL TIMEFRAMES — BUYERS'; color='var(--green)'; }
+  else if(bear===vals.length){ text='ALL TIMEFRAMES — SELLERS'; color='var(--red)'; }
+  else if(bull>bear){ text=`MOSTLY BUYERS (${bull}/${vals.length})`; color='var(--green)'; }
+  else if(bear>bull){ text=`MOSTLY SELLERS (${bear}/${vals.length})`; color='var(--red)'; }
+  else { text='MIXED — NO CONFLUENCE'; color='var(--amber)'; }
+  const call = el.querySelector('.call');
+  if(call){ call.textContent = text; call.style.color = color; }
+}
+
+/* ================= SMT ================= */
+const SMT_TF_OPTIONS = ['1m','3m','5m','15m','1H'];
+let smtTF = '5m';
+
+function renderSMT(tickers){
+  const a = byId(tickers[0]) || byId('NAS100');
+  const b = byId(tickers[1]) || (a.id==='NAS100' ? byId('SP500') : byId('NAS100'));
+  document.getElementById('detail').innerHTML = `
+    <div class="detail-head"><span class="code">SMT</span>
+      <div><div class="detail-title">${a.id} vs ${b.id}</div><div class="detail-sub">Swing-structure divergence between correlated instruments</div></div>
+      ${backLink()}
+    </div>
+    <div style="font-size:11px;color:var(--muted);letter-spacing:1px;margin-bottom:4px;">TIMEFRAME</div>
+    <div id="smt-chips"></div>
+    <div id="smt-body"></div>`;
+  paintSMTChips(a, b);
+  loadSMT(a, b);
+}
+
+function paintSMTChips(a, b){
+  const el = document.getElementById('smt-chips');
+  if(!el) return;
+  el.innerHTML = `<div style="display:flex;gap:6px;margin-bottom:14px;">${SMT_TF_OPTIONS.map(tf=>
+    `<button class="smt-tf-chip" data-tf="${tf}" style="background:${tf===smtTF?'var(--amber)':'var(--panel)'};color:${tf===smtTF?'#000':'var(--muted)'};border:1px solid ${tf===smtTF?'var(--amber)':'var(--border)'};font-family:var(--mono);font-size:11px;padding:4px 10px;cursor:pointer;letter-spacing:.5px;">${tf}</button>`
+  ).join('')}</div>`;
+  el.querySelectorAll('.smt-tf-chip').forEach(btn=>{
+    btn.onclick = ()=>{
+      smtTF = btn.dataset.tf;
+      paintSMTChips(a, b);
+      loadSMT(a, b);
+    };
+  });
+}
+
+function loadSMT(a, b){
+  const body = document.getElementById('smt-body');
+  if(body) body.innerHTML = `<div class="help-note">Loading…</div>`;
+  const state = {};
+  const maybeRepaint = ()=>{ if(state.a && state.b) paintSMT(a, b, state.a, state.b); };
+  // instant paint fires synchronously from cache/synthetic, then each resolves
+  // again in the background if a live fetch lands — no polling, no flicker.
+  loadTF(a, smtTF, e=>{ state.a = e; maybeRepaint(); });
+  loadTF(b, smtTF, e=>{ state.b = e; maybeRepaint(); });
+}
+
+function paintSMT(a, b, entryA, entryB){
+  if(view.code!=='SMT') return;
+  const body = document.getElementById('smt-body');
+  if(!body) return;
+  const pa = findPivots(entryA.bars, 2), pb = findPivots(entryB.bars, 2);
+  const highDiv = readDivergence(pa.highs, pb.highs, a.id, b.id, 'high');
+  const lowDiv  = readDivergence(pa.lows,  pb.lows,  a.id, b.id, 'low');
+
+  body.innerHTML = `
+    <div class="intel-grid" style="grid-template-columns:1fr 1fr;margin-bottom:16px;">
+      <div class="intel-card"><h3>${a.id} — LAST SWINGS <span class="badge ${entryA.live?'live':'sim'}" style="margin-left:6px;">${entryA.live?'LIVE':'SIM'}</span></h3>
+        <div class="intel-row">High <b style="margin-left:auto">${pa.highs.length?fmt(a,pa.highs[pa.highs.length-1].price):'—'}</b></div>
+        <div class="intel-row">Low <b style="margin-left:auto">${pa.lows.length?fmt(a,pa.lows[pa.lows.length-1].price):'—'}</b></div>
+      </div>
+      <div class="intel-card"><h3>${b.id} — LAST SWINGS <span class="badge ${entryB.live?'live':'sim'}" style="margin-left:6px;">${entryB.live?'LIVE':'SIM'}</span></h3>
+        <div class="intel-row">High <b style="margin-left:auto">${pb.highs.length?fmt(b,pb.highs[pb.highs.length-1].price):'—'}</b></div>
+        <div class="intel-row">Low <b style="margin-left:auto">${pb.lows.length?fmt(b,pb.lows[pb.lows.length-1].price):'—'}</b></div>
+      </div>
+    </div>
+    <div class="intel-verdict" style="flex-direction:column;align-items:flex-start;gap:8px;">
+      <div class="intel-row"><i class="dot ${highDiv.flag?'dot-bull':'dot-neu'}"></i>${highDiv.text}</div>
+      <div class="intel-row"><i class="dot ${lowDiv.flag?'dot-bull':'dot-neu'}"></i>${lowDiv.text}</div>
+    </div>
+    <div class="help-note">Try <b style="color:var(--amber)">SMT NAS100 SP500</b> or <b style="color:var(--amber)">SMT XAUUSD EURUSD</b>. This flags raw swing divergence over the last two pivots on <b style="color:var(--text)">${smtTF}</b> bars — it's an observation, not a signal to act on. Static snapshot: switch timeframe or reissue the command to refresh, it won't jump on its own.</div>`;
+}
+
+/* ================= SESS ================= */
+const SESSIONS = [
+  { name:'Asian',  start:19, end:4  },
+  { name:'London', start:3,  end:12 },
+  { name:'New York', start:8, end:17 },
+];
+const KILLZONES = [
+  { name:'Asian KZ',        start:20, end:0  },
+  { name:'London Open KZ',  start:2,  end:5  },
+  { name:'NY AM KZ',        start:7,  end:10 },
+  { name:'London Close KZ', start:10, end:12 },
+];
+function nyNow(){
+  const parts = new Intl.DateTimeFormat('en-US',{ timeZone:'America/New_York', hour12:false, hour:'2-digit', minute:'2-digit', second:'2-digit' }).formatToParts(new Date());
+  const get = t => parseInt(parts.find(p=>p.type===t).value);
+  return { h:get('hour'), m:get('minute'), s:get('second') };
+}
+function inWindow(h, start, end){
+  return start < end ? (h>=start && h<end) : (h>=start || h<end);
+}
+function hoursUntil(h, m, target){
+  let diff = (target - h) - m/60;
+  if(diff <= 0) diff += 24;
+  return diff;
+}
+function renderSESS(){
+  const { h, m } = nyNow();
+  const rows = (items)=> items.map(it=>{
+    const active = inWindow(h, it.start, it.end);
+    const untilStr = active
+      ? `closes in ${hoursUntil(h,m,it.end).toFixed(1)}h`
+      : `opens in ${hoursUntil(h,m,it.start).toFixed(1)}h`;
+    return `<div class="intel-row"><i class="dot ${active?'dot-bull':'dot-neu'}"></i>${it.name} <b style="margin-left:auto">${String(it.start).padStart(2,'0')}:00–${String(it.end).padStart(2,'0')}:00 NY</b></div>
+      <div style="font-size:10px;color:var(--muted);margin:-2px 0 6px 15px;">${active?'ACTIVE — ':''}${untilStr}</div>`;
+  }).join('');
+  document.getElementById('detail').innerHTML = `
+    <div class="detail-head"><span class="code">SESS</span>
+      <div><div class="detail-title">Session Clock</div><div class="detail-sub">${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')} New York time right now</div></div>
+      ${backLink()}
+    </div>
+    <div class="intel-grid" style="grid-template-columns:1fr 1fr;">
+      <div class="intel-card"><h3>SESSIONS</h3>${rows(SESSIONS)}</div>
+      <div class="intel-card"><h3>ICT KILLZONES</h3>${rows(KILLZONES)}</div>
+    </div>
+    <div class="help-note">Times are commonly-cited approximate windows in New York time (DST-adjusted automatically) — treat them as reference, not gospel, and adjust to your own playbook.</div>`;
+}
+
+/* ================= CAL: economic calendar quick-links ================= */
+// No free, key-less endpoint reliably serves calendar data to a browser from
+// here — so rather than guess at today's actual events, this points to the
+// real calendars and lists only the *generic recurring pattern*, not dates.
+function renderCAL(){
+  document.getElementById('detail').innerHTML = `
+    <div class="detail-head"><span class="code">CAL</span>
+      <div><div class="detail-title">Economic Calendar</div><div class="detail-sub">Quick links + the typical recurring schedule — not today's specific events</div></div>
+      ${backLink()}
+    </div>
+    <div class="intel-grid" style="grid-template-columns:1fr 1fr;margin-bottom:16px;">
+      <div class="intel-card"><h3>LIVE CALENDARS</h3>
+        <div style="display:flex;flex-direction:column;gap:10px;font-size:13px;margin-top:4px;">
+          <a href="https://www.forexfactory.com/calendar" target="_blank" rel="noopener" style="color:var(--amber);">ForexFactory — calendar</a>
+          <a href="https://www.investing.com/economic-calendar/" target="_blank" rel="noopener" style="color:var(--amber);">Investing.com — economic calendar</a>
+          <a href="https://tradingeconomics.com/calendar" target="_blank" rel="noopener" style="color:var(--amber);">TradingEconomics — calendar</a>
+        </div>
+      </div>
+      <div class="intel-card"><h3>TYPICAL HIGH-IMPACT (US)</h3>
+        <div class="intel-row">NFP <b style="margin-left:auto">First Friday, 8:30 NY</b></div>
+        <div class="intel-row">CPI <b style="margin-left:auto">~mid-month, 8:30 NY</b></div>
+        <div class="intel-row">FOMC decision <b style="margin-left:auto">8x/year, ~14:00 NY</b></div>
+        <div class="intel-row">Retail Sales <b style="margin-left:auto">~mid-month, 8:30 NY</b></div>
+      </div>
+    </div>
+    <div class="help-note">The right column is a <b style="color:var(--text)">recurring pattern</b>, not confirmed dates for this week — this terminal has no reliable way to fetch live calendar data from inside a browser sandbox, so guessing specific dates would just be wrong sometimes. Check the links for the actual schedule. Worth cross-referencing with <b style="color:var(--amber)">SESS</b> — most of these land in the NY AM killzone.</div>`;
+}
+
+/* ================= NI (news) ================= */
+async function fetchNews(inst){
+  const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(inst.newsQuery)}&newsCount=8&quotesCount=0`;
+  const controller = new AbortController();
+  const t = setTimeout(()=>controller.abort(), 6000);
+  try{
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(t);
+    if(!res.ok) throw new Error('bad status');
+    const json = await res.json();
+    const news = json?.news;
+    if(!news || !news.length) throw new Error('no news');
+    return news.slice(0,8).map(n=>({ title:n.title, publisher:n.publisher, time:n.providerPublishTime, link:n.link }));
+  }catch(err){
+    clearTimeout(t);
+    return null;
+  }
+}
+async function renderNI(tickerId){
+  const inst = byId(tickerId);
+  document.getElementById('detail').innerHTML = `
+    <div class="detail-head"><span class="code">NI</span>
+      <div><div class="detail-title">${inst.id} News</div><div class="detail-sub">Checking for live headlines…</div></div>
+      ${backLink()}
+    </div>
+    <div id="ni-body"></div>`;
+  const news = await fetchNews(inst);
+  if(view.code!=='NI' || view.ticker!==inst.id) return;
+  const body = document.getElementById('ni-body');
+  if(news){
+    body.innerHTML = `<span class="badge live" style="margin-bottom:10px;display:inline-block;">LIVE</span>` + news.map(n=>`
+      <div style="padding:10px 0;border-bottom:1px solid var(--border-soft);">
+        <a href="${n.link}" target="_blank" rel="noopener" style="color:var(--text);text-decoration:none;font-size:13px;">${n.title}</a>
+        <div style="font-size:10px;color:var(--muted);margin-top:3px;">${n.publisher||''}${n.time?' · '+new Date(n.time*1000).toLocaleString():''}</div>
+      </div>`).join('');
+  }else{
+    const yfLink = `https://finance.yahoo.com/quote/${encodeURIComponent(inst.yTicker)}`;
+    body.innerHTML = `
+      <span class="badge sim" style="margin-bottom:10px;display:inline-block;">BLOCKED</span>
+      <div class="help-note" style="margin-top:0;">Live headlines didn't come through — likely this sandbox's network/CORS policy blocking the request, not a real "no news" situation. Rather than guess at headlines, here are direct links:</div>
+      <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px;font-size:13px;">
+        <a href="${yfLink}" target="_blank" rel="noopener" style="color:var(--amber);">Yahoo Finance — ${inst.id}</a>
+        <a href="https://www.forexfactory.com/calendar" target="_blank" rel="noopener" style="color:var(--amber);">ForexFactory — economic calendar</a>
+        <a href="https://www.investing.com/search/?q=${encodeURIComponent(inst.newsQuery)}" target="_blank" rel="noopener" style="color:var(--amber);">Investing.com — search ${inst.id}</a>
+      </div>`;
+  }
+}
+
+
+const CODES = {
+  CC:   { needsTicker:false, desc:'Command Center — full dashboard' },
+  INTEL:{ needsTicker:true,  desc:'Technical signal scorecard for one instrument' },
+  GP:   { needsTicker:true,  desc:'Full-size chart with range stats' },
+  QR:   { needsTicker:true,  desc:'Live quote, large format' },
+  HP:   { needsTicker:true,  desc:'Recent price history table' },
+  PO3:  { needsTicker:true,  desc:'HTF/LTF candles (1m-4H) for accumulation/manipulation/distribution' },
+  SCAN: { needsTicker:true,  desc:'4H/1H confluence scorecard: MSS/BOS, FVG/OB/IFVG, OTE zone, range read + when-to-BE guidance' },
+  WS:   { needsTicker:false, desc:'Workspace — pin multiple QR/INTEL/SCAN/CHART panels side by side, saved automatically' },
+  LIQ:  { needsTicker:true,  desc:'PDH/PDL, PWH/PWL, and nearest equal-high/low liquidity pools' },
+  FLOW: { needsTicker:true,  desc:'Buyer/seller pressure by timeframe, for confluence (price-action proxy, not real order flow)' },
+  SMT:  { needsTicker:true,  desc:'Swing divergence between two instruments, 1m-1H — e.g. SMT NAS100 SP500' },
+  SESS: { needsTicker:false, desc:'Asian/London/NY session clock + ICT killzones' },
+  CAL:  { needsTicker:false, desc:'Economic calendar quick-links + typical high-impact schedule' },
+  NI:   { needsTicker:true,  desc:'News headlines (live if reachable, else quick links)' },
+  RISK: { needsTicker:true,  desc:'Position-size calculator from account risk % + stop distance' },
+  ALERT:{ needsTicker:false, desc:'Manage price alerts, plus a live log of SCAN STRONG crossovers — both flash + beep' },
+  FXC:  { needsTicker:false, desc:'FX/spot majors side by side' },
+  HELP: { needsTicker:false, desc:'This function list' },
+};
+let view = { code:'CC', ticker:null, tickers:[] };
+let lastTicker = 'EURUSD';
+let cmdHistory = [];
+let cmdIndex = -1;
+
+const input = document.getElementById('cmd-input');
+const ac = document.getElementById('autocomplete');
+
+function parseCommand(raw){
+  const tokens = raw.trim().toUpperCase().split(/\s+/).filter(Boolean);
+  if(tokens.length===0) return null;
+  let code=null; const tickers=[];
+  tokens.forEach(tok=>{
+    if(CODES[tok]) code = tok;
+    else if(byId(tok)) tickers.push(tok);
+  });
+  if(!code && tickers.length) code = 'INTEL';
+  if(!code) return null;
+  if(CODES[code].needsTicker && tickers.length===0) tickers.push(lastTicker);
+  return { code, tickers };
+}
+
+function setView(code, tickerOrArray){
+  const cfg = CODES[code];
+  if(!cfg) return;
+  const tickers = Array.isArray(tickerOrArray) ? tickerOrArray : (tickerOrArray ? [tickerOrArray] : []);
+  if(tickers.length) lastTicker = tickers[0];
+  const finalTickers = cfg.needsTicker && tickers.length===0 ? [lastTicker] : tickers;
+  view = { code, tickers: finalTickers, ticker: finalTickers[0] || null };
+  route();
+}
+
+function route(){
+  const isCC = view.code === 'CC';
+  document.getElementById('grid').style.display = isCC ? '' : 'none';
+  document.getElementById('detail').style.display = isCC ? 'none' : 'block';
+  document.getElementById('cc-toggle').style.visibility = isCC ? 'visible' : 'hidden';
+  if(isCC){ renderCC(); return; }
+  switch(view.code){
+    case 'INTEL': renderIntel(view.ticker); break;
+    case 'GP': renderGP(view.ticker); break;
+    case 'PO3': renderPO3(view.ticker); break;
+    case 'SCAN': renderSCAN(view.ticker); break;
+    case 'WS': renderWorkspace(); break;
+    case 'QR': renderQR(view.ticker); break;
+    case 'HP': renderHP(view.ticker); break;
+    case 'LIQ': renderLIQ(view.ticker); break;
+    case 'FLOW': renderFLOW(view.ticker); break;
+    case 'SMT': renderSMT(view.tickers); break;
+    case 'SESS': renderSESS(); break;
+    case 'CAL': renderCAL(); break;
+    case 'NI': renderNI(view.ticker); break;
+    case 'RISK': renderRISK(view.ticker); break;
+    case 'ALERT': renderALERT(); break;
+    case 'FXC': renderFXC(); break;
+    case 'HELP': renderHelp(); break;
+  }
+  buildTape();
+}
+
+function backLink(){ return `<div class="back" onclick="setView('CC')">&larr; CC</div>`; }
+
+function renderIntel(tickerId){
+  const inst = byId(tickerId);
+  const sig = computeSignals(inst);
+  const dotClass = c => c==='bull'?'dot-bull':c==='bear'?'dot-bear':'dot-neu';
+  const verdictColor = sig.verdict.includes('BULL') ? 'var(--green)' : sig.verdict.includes('BEAR') ? 'var(--red)' : 'var(--amber)';
+  document.getElementById('detail').innerHTML = `
+    <div class="detail-head">
+      <span class="code">INTEL</span>
+      <div>
+        <div class="detail-title">${inst.id} <span style="color:var(--muted);font-weight:400;font-size:14px;">${inst.name} · ${inst.note}</span></div>
+        <div class="detail-sub">Mid ${fmt(inst,inst.price)} &nbsp;·&nbsp; ${inst.live?'LIVE':'SIM'}</div>
+      </div>
+      ${backLink()}
+    </div>
+    <div class="intel-verdict">
+      <div>
+        <div class="label">INTELLIGENCE VERDICT</div>
+        <div class="call" style="color:${verdictColor}">${sig.verdict}</div>
+      </div>
+      <div class="dots">
+        <span><i style="background:var(--green)"></i>${sig.bull} bullish</span>
+        <span><i style="background:var(--muted)"></i>${sig.neu} neutral</span>
+        <span><i style="background:var(--red)"></i>${sig.bear} bearish</span>
+      </div>
+    </div>
+    <div class="intel-grid">
+      <div class="intel-card">
+        <h3>TREND</h3>
+        ${sig.rows.slice(0,2).map(r=>`<div class="intel-row"><i class="dot ${dotClass(r.call)}"></i>${r.label}: <b style="margin-left:auto">${r.v}</b></div>`).join('')}
+      </div>
+      <div class="intel-card">
+        <h3>MOMENTUM &amp; RANGE</h3>
+        ${sig.rows.slice(2,4).map(r=>`<div class="intel-row"><i class="dot ${dotClass(r.call)}"></i>${r.label}: <b style="margin-left:auto">${r.v}</b></div>`).join('')}
+      </div>
+      <div class="intel-card">
+        <h3>SESSION &amp; VOLATILITY</h3>
+        <div class="intel-row"><i class="dot ${dotClass(sig.rows[4].call)}"></i>${sig.rows[4].label}: <b style="margin-left:auto">${sig.rows[4].v}</b></div>
+        <div class="intel-row"><i class="dot dot-neu"></i>${sig.volRow.label}: <b style="margin-left:auto">${sig.volRow.v}</b></div>
+      </div>
+    </div>
+    <div class="help-note">Rules-based on price action only — moving averages, momentum, range position, realized volatility. No fundamentals/valuation here since FX and index CFDs don't have earnings or P/E. Not a prediction; treat it as a fast read, not a signal to trade on.</div>
+  `;
+}
+
+function renderGP(tickerId){
+  const inst = byId(tickerId);
+  document.getElementById('detail').innerHTML = `
+    <div class="detail-head">
+      <span class="code">GP</span>
+      <div><div class="detail-title">${inst.id}</div><div class="detail-sub">${inst.name} · ${inst.note}</div></div>
+      ${backLink()}
+    </div>
+    <div class="gp-wrap">
+      <canvas class="gp-canvas" id="gp-canvas"></canvas>
+      <div class="gp-stats">
+        <span>Last <b>${fmt(inst,inst.price)}</b></span>
+        <span>Open <b>${fmt(inst,inst.open)}</b></span>
+        <span>High <b>${fmt(inst,inst.hi)}</b></span>
+        <span>Low <b>${fmt(inst,inst.lo)}</b></span>
+        <span>Bars shown <b>${inst.history.length}</b></span>
+        <span>Source <b>${inst.live?'Yahoo Finance (live)':'Simulated fallback'}</b></span>
+      </div>
+    </div>`;
+  requestAnimationFrame(()=> drawChart(inst, document.getElementById('gp-canvas')));
+}
+
+function renderQR(tickerId){
+  const inst = byId(tickerId);
+  const delta = inst.price - inst.open;
+  const pct = inst.open ? (delta/inst.open)*100 : 0;
+  const isUp = delta>=0;
+  const secsAgo = inst.lastUpdate ? Math.round((Date.now()-inst.lastUpdate)/1000) : null;
+  document.getElementById('detail').innerHTML = `
+    <div class="detail-head">
+      <span class="code">QR</span>
+      <div><div class="detail-title">${inst.id}</div><div class="detail-sub">${inst.name} · mid price, not a true bid/ask spread</div></div>
+      ${backLink()}
+    </div>
+    <div class="qr-box">
+      <div class="qr-price ${isUp?'up':'down'}">${fmt(inst,inst.price)}</div>
+      <div class="qr-chg ${isUp?'up':'down'}">${isUp?'+':''}${fmt(inst,delta)} (${isUp?'+':''}${pct.toFixed(2)}%)</div>
+      <div class="qr-meta">
+        <span>OPEN <b>${fmt(inst,inst.open)}</b></span>
+        <span>HIGH <b>${fmt(inst,inst.hi)}</b></span>
+        <span>LOW <b>${fmt(inst,inst.lo)}</b></span>
+        <span>SOURCE <b>${inst.live?'LIVE':'SIM'}</b></span>
+      </div>
+      <div class="qr-countdown">${secsAgo!==null ? `last real quote ${secsAgo}s ago · ` : ''}refreshing every ~1s</div>
+    </div>`;
+}
+
+function renderHP(tickerId){
+  const inst = byId(tickerId);
+  const rows = inst.history.map((v,i)=>({ t: inst.times[i], p: v })).slice(-30).reverse();
+  document.getElementById('detail').innerHTML = `
+    <div class="detail-head">
+      <span class="code">HP</span>
+      <div><div class="detail-title">${inst.id}</div><div class="detail-sub">Last ${rows.length} bars ${inst.live?'(real intraday closes)':'(simulated)'}</div></div>
+      ${backLink()}
+    </div>
+    <table class="hp">
+      <thead><tr><th>TIME</th><th>PRICE</th><th>&Delta; VS PREV</th></tr></thead>
+      <tbody>
+        ${rows.map((r,i)=>{
+          const prev = rows[i+1]?.p;
+          const d = prev!=null ? r.p-prev : 0;
+          const cls = d>=0?'up':'down';
+          const time = r.t ? new Date(r.t*1000).toLocaleTimeString() : '—';
+          return `<tr><td>${time}</td><td>${fmt(inst,r.p)}</td><td class="${cls}">${prev!=null ? (d>=0?'+':'')+fmt(inst,d) : '—'}</td></tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+}
+
+function renderFXC(){
+  const pairs = INSTRUMENTS.filter(i=> i.id==='EURUSD' || i.id==='XAUUSD');
+  document.getElementById('detail').innerHTML = `
+    <div class="detail-head">
+      <span class="code">FXC</span>
+      <div><div class="detail-title">FX / Spot Majors</div><div class="detail-sub">Instruments quoted against USD in this terminal</div></div>
+      ${backLink()}
+    </div>
+    <div class="fxc-grid">
+      ${pairs.map(inst=>{
+        const delta = inst.price-inst.open, pct = inst.open?(delta/inst.open)*100:0, isUp=delta>=0;
+        return `<div class="panel" style="cursor:pointer" onclick="setView('INTEL','${inst.id}')">
+          <div class="panel-head">
+            <div><div class="sym">${inst.id} <span class="badge ${inst.live?'live':'sim'}">${inst.live?'LIVE':'SIM'}</span></div><div class="sym-name">${inst.name}</div></div>
+            <div class="price-block"><div class="price ${isUp?'up':'down'}">${fmt(inst,inst.price)}</div><div class="chg ${isUp?'up':'down'}">${isUp?'+':''}${pct.toFixed(2)}%</div></div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+function renderHelp(){
+  document.getElementById('detail').innerHTML = `
+    <div class="detail-head"><span class="code">HELP</span><div class="detail-title">Function directory</div>${backLink()}</div>
+    <div class="help-section">Codes</div>
+    <div class="help-grid">
+      ${Object.entries(CODES).map(([k,v])=>`<div class="k">${k}</div><div class="v">${v.desc}${v.needsTicker?' — needs a ticker (e.g. '+k+' EURUSD)':''}</div>`).join('')}
+    </div>
+    <div class="help-section">Instruments tracked</div>
+    <div class="help-grid">
+      ${INSTRUMENTS.map(i=>`<div class="k">${i.id}</div><div class="v">${i.name} — ${i.note}</div>`).join('')}
+    </div>
+    <div class="help-note">Syntax: type a ticker alone for INTEL (e.g. "XAUUSD"), or CODE + ticker in either order (e.g. "GP NAS100" or "NAS100 GP"). CC and HELP don't need a ticker. Press / anywhere to jump into the command bar, ↑/↓ to walk your command history, ⇥ to autocomplete.</div>
+  `;
+}
+
+/* ---- command bar interactions ---- */
+function showAutocomplete(){
+  const val = input.value.trim().toUpperCase();
+  const lastTok = val.split(/\s+/).pop();
+  if(!lastTok){ ac.classList.remove('show'); return; }
+  const matches = Object.keys(CODES).filter(c=>c.startsWith(lastTok));
+  if(matches.length===0 || (matches.length===1 && matches[0]===lastTok)){ ac.classList.remove('show'); return; }
+  ac.innerHTML = matches.map(c=>`<div data-code="${c}"><b>${c}</b><span>${CODES[c].desc}</span></div>`).join('');
+  ac.classList.add('show');
+  ac.querySelectorAll('div').forEach(el=> el.onclick = ()=>{
+    const toks = val.split(/\s+/); toks[toks.length-1] = el.dataset.code;
+    input.value = toks.join(' ') + ' ';
+    ac.classList.remove('show'); input.focus();
+  });
+}
+
+input.addEventListener('input', showAutocomplete);
+
+input.addEventListener('keydown', e=>{
+  if(e.key === 'Enter'){
+    const raw = input.value;
+    if(!raw.trim()) return;
+    const parsed = parseCommand(raw);
+    ac.classList.remove('show');
+    if(parsed){
+      cmdHistory.push(raw.trim().toUpperCase());
+      cmdIndex = cmdHistory.length;
+      setView(parsed.code, parsed.tickers);
+      input.value = '';
+    }
+  } else if(e.key === 'Tab'){
+    e.preventDefault();
+    const val = input.value.trim().toUpperCase();
+    const lastTok = val.split(/\s+/).pop();
+    const match = Object.keys(CODES).find(c=>c.startsWith(lastTok));
+    if(match){ const toks=val.split(/\s+/); toks[toks.length-1]=match; input.value=toks.join(' ')+' '; }
+    ac.classList.remove('show');
+  } else if(e.key === 'ArrowUp'){
+    e.preventDefault();
+    if(cmdIndex>0){ cmdIndex--; input.value = cmdHistory[cmdIndex]; }
+  } else if(e.key === 'ArrowDown'){
+    e.preventDefault();
+    if(cmdIndex<cmdHistory.length-1){ cmdIndex++; input.value = cmdHistory[cmdIndex]; }
+    else{ cmdIndex = cmdHistory.length; input.value=''; }
+  } else if(e.key === 'Escape'){
+    ac.classList.remove('show'); input.blur();
+  }
+});
+
+document.addEventListener('keydown', e=>{
+  if(e.key === '/' && document.activeElement !== input){
+    e.preventDefault(); input.focus();
+  }
+});
+
+document.getElementById('tape').addEventListener('click', ()=> setView('CC'));
+
+/* ================= clock ================= */
+function tickClock(){ document.getElementById('clock').textContent = new Date().toUTCString().split(' ')[4] + ' UTC'; }
+
+/* ================= main loops ================= */
+function refreshView(){
+  // Underlying instrument data keeps ticking regardless of what's on screen.
+  // But only these "live number" views repaint automatically — anything with
+  // chip state or a real fetch behind it (PO3/LIQ/SMT/NI/INTEL/HP) is a
+  // snapshot that refreshes on command, not on a background timer.
+  switch(view.code){
+    case 'CC': renderCC(); break;
+    case 'QR': renderQR(view.ticker); break;
+    case 'GP': renderGP(view.ticker); break;
+    case 'FXC': renderFXC(); break;
+    case 'WS': tickWorkspace(); break;
+  }
+}
+
+function simulateStep(){
+  INSTRUMENTS.forEach(inst=>{ if(!inst.live) fetchTick(inst); });
+  refreshView();
+  checkAlerts();
+}
+async function pollLiveData(){
+  await Promise.all(INSTRUMENTS.map(inst => fetchYahoo(inst)));
+  refreshView();
+}
+
+/* ================= PWA: install + push notifications ================= */
+// Public key only — safe to embed. Its matching private key lives as a
+// GitHub Actions secret in the ict-scan-alerts repo, never here.
+const VAPID_PUBLIC_KEY = 'BJR2pCXHk-54LcdJTaDeQO5rgnCmQZOmsizokSGQIIU_jdCA8iWDIzl2BttDpBwh1T94OoRRjtZSRVUNLJw7H_Y';
+
+function urlBase64ToUint8Array(base64String){
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));
+}
+
+if('serviceWorker' in navigator){
+  // Registration itself is silent/automatic — it's just app-shell caching +
+  // installability. Actually subscribing to push still needs the button in
+  // the ALERT panel, since permission prompts require a user gesture.
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{ /* not hosted over https, or no sw.js here — fine, rest of the app still works */ });
+  });
+}
+
+async function initPushUI(){
+  const statusEl = document.getElementById('push-status');
+  const btn = document.getElementById('push-enable-btn');
+  if(!statusEl || !btn) return;
+  if(!('serviceWorker' in navigator) || !('PushManager' in window)){
+    statusEl.textContent = 'Push isn\u2019t supported in this browser/context (works once installed from a real https:// URL, e.g. GitHub Pages).';
+    btn.disabled = true; btn.style.opacity = 0.4; btn.style.cursor = 'default';
+    return;
+  }
+  try{
+    const reg = await navigator.serviceWorker.ready;
+    const existing = await reg.pushManager.getSubscription();
+    if(existing){
+      statusEl.textContent = 'Already subscribed on this device.';
+      showPushSubscription(existing);
+    }else{
+      statusEl.textContent = 'Not subscribed yet on this device.';
+    }
+  }catch(err){
+    statusEl.textContent = 'Not registered yet — installing this as an app first (Add to Home Screen) makes this more reliable.';
+  }
+  btn.onclick = subscribeToPush;
+}
+
+async function subscribeToPush(){
+  const statusEl = document.getElementById('push-status');
+  try{
+    const perm = await Notification.requestPermission();
+    if(perm !== 'granted'){ statusEl.textContent = 'Permission denied — enable notifications for this site in your browser/OS settings to try again.'; return; }
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+    });
+    statusEl.textContent = 'Subscribed on this device.';
+    showPushSubscription(sub);
+  }catch(err){
+    statusEl.textContent = 'Subscribe failed: ' + (err && err.message ? err.message : 'unknown error') + ' — this needs to be installed from a real https:// URL (GitHub Pages), not a local/preview file.';
+  }
+}
+
+function showPushSubscription(sub){
+  const box = document.getElementById('push-sub-box');
+  const ta = document.getElementById('push-sub-json');
+  if(!box || !ta) return;
+  const json = JSON.stringify(sub.toJSON ? sub.toJSON() : sub, null, 2);
+  ta.value = json;
+  box.style.display = 'block';
+  const copyBtn = document.getElementById('push-copy-btn');
+  if(copyBtn) copyBtn.onclick = ()=>{
+    ta.select();
+    if(navigator.clipboard) navigator.clipboard.writeText(json).catch(()=>document.execCommand('copy'));
+    else document.execCommand('copy');
+    copyBtn.textContent = 'COPIED';
+    setTimeout(()=> copyBtn.textContent = 'COPY', 1500);
+  };
+}
+
+tickClock();
+route();
+loadAlerts();
+loadWorkspace();
+setInterval(tickClock, 1000);
+setInterval(simulateStep, 900);
+setInterval(pollLiveData, 15000);
+window.addEventListener('resize', ()=>{ if(view.code==='CC') INSTRUMENTS.forEach(i=>drawChart(i, ccCanvases[i.id])); else if(view.code==='GP') drawChart(byId(view.ticker), document.getElementById('gp-canvas')); });
+pollLiveData();
+
+// Background SCAN: keeps every instrument's confluence read fresh for the CC
+// badge and STRONG-crossover alerts, independent of what's on screen. 4H/1H
+// bars are cheap after the first fetch (loadTF caches for 5min), so a 3min
+// tick is plenty without hammering Yahoo.
+INSTRUMENTS.forEach(refreshScanCache);
+setInterval(()=> INSTRUMENTS.forEach(refreshScanCache), 3*60*1000);
+</script>
+</body>
+</html>
