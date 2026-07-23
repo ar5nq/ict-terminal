@@ -845,10 +845,29 @@ function scoreSetup({ trend4h, break1h, range, ote, fvgs, obs, smt, price, instI
   if(invFVGs.length){ score+=10; notes.push(`${invFVGs.length} inversed FVG (IFVG) on the chart — reversal marker (+10)`); }
   if((obs||[]).length){ score+=10; notes.push(`${obs.length} order block(s) mapped on this leg (+10)`); }
   if(smt){
-    const bullSMT = bias==='BULLISH' && smt.lowDiv && smt.lowDiv.flag && smt.lowDiv.aUp===false && smt.lowDiv.bUp===true;
-    const bearSMT = bias==='BEARISH' && smt.highDiv && smt.highDiv.flag && smt.highDiv.aUp===true && smt.highDiv.bUp===false;
-    if(bullSMT){ score+=10; notes.push(`SMT divergence vs ${smt.partnerId} on the low — ${instId} weaker there, bullish tell (+10)`); }
-    else if(bearSMT){ score+=10; notes.push(`SMT divergence vs ${smt.partnerId} on the high — ${instId} stronger there, bearish tell (+10)`); }
+    // Each timeframe's SMT reading, independent of bias — classic ICT tells:
+    // a low divergence (we print lower, partner prints higher) = bullish tell;
+    // a high divergence (we print higher, partner prints lower) = bearish tell.
+    const smtRead = (divSet) => {
+      if(!divSet) return null;
+      if(divSet.lowDiv && divSet.lowDiv.flag && divSet.lowDiv.aUp===false && divSet.lowDiv.bUp===true) return 'bullish';
+      if(divSet.highDiv && divSet.highDiv.flag && divSet.highDiv.aUp===true && divSet.highDiv.bUp===false) return 'bearish';
+      return null;
+    };
+    const read1h = smtRead(smt.smt1h);
+    const read4h = smtRead(smt.smt4h);
+
+    // Higher timeframe SMT carries more weight — it reflects broader
+    // positioning, not short-term noise that can resolve in an hour.
+    if(read4h==='bullish' && bias==='BULLISH'){ score+=15; notes.push(`4H SMT divergence vs ${smt.partnerId} on the low — ${instId} weaker there, bullish tell, HTF (+15)`); }
+    else if(read4h==='bearish' && bias==='BEARISH'){ score+=15; notes.push(`4H SMT divergence vs ${smt.partnerId} on the high — ${instId} stronger there, bearish tell, HTF (+15)`); }
+
+    if(read1h==='bullish' && bias==='BULLISH'){ score+=10; notes.push(`1H SMT divergence vs ${smt.partnerId} on the low — ${instId} weaker there, bullish tell (+10)`); }
+    else if(read1h==='bearish' && bias==='BEARISH'){ score+=10; notes.push(`1H SMT divergence vs ${smt.partnerId} on the high — ${instId} stronger there, bearish tell (+10)`); }
+
+    if(read1h && read4h && read1h!==read4h){
+      notes.push(`Heads up: 1H SMT reads ${read1h}, 4H SMT reads ${read4h} — they disagree, weight the 4H read more`);
+    }
   }
   score = Math.max(0, Math.min(100, score));
   const label = score>=70?'STRONG':score>=45?'MODERATE':score>=20?'WEAK':'AVOID';
@@ -868,8 +887,9 @@ function beGuidance(result, range){
 
 // Pure bundle — no DOM — so both the SCAN detail view and the background
 // CC-badge/alert scanner run the exact same read.
-function computeScan(inst, bars4, bars1, partnerBars1){
+function computeScan(inst, bars4, bars1, partnerBars1, partnerBars4){
   const pivots1  = findPivots(bars1, 2);
+  const pivots4  = findPivots(bars4, 2);
   const trend4h  = structureTrend(bars4, 2);
   const break1h  = lastBreak(bars1, trend4h.bias, 2);
   const range    = classifyRange(bars4, bars1);
@@ -879,12 +899,20 @@ function computeScan(inst, bars4, bars1, partnerBars1){
   const partnerId = SMT_PARTNER[inst.id];
   let smt = null;
   if(partnerId && partnerBars1 && partnerBars1.length>=6){
-    const pivotsP = findPivots(partnerBars1, 2);
-    smt = {
-      partnerId,
-      highDiv: readDivergence(pivots1.highs, pivotsP.highs, inst.id, partnerId, 'high'),
-      lowDiv:  readDivergence(pivots1.lows,  pivotsP.lows,  inst.id, partnerId, 'low'),
+    const pivotsP1 = findPivots(partnerBars1, 2);
+    const smt1h = {
+      highDiv: readDivergence(pivots1.highs, pivotsP1.highs, inst.id, partnerId, '1H high'),
+      lowDiv:  readDivergence(pivots1.lows,  pivotsP1.lows,  inst.id, partnerId, '1H low'),
     };
+    let smt4h = null;
+    if(partnerBars4 && partnerBars4.length>=6){
+      const pivotsP4 = findPivots(partnerBars4, 2);
+      smt4h = {
+        highDiv: readDivergence(pivots4.highs, pivotsP4.highs, inst.id, partnerId, '4H high'),
+        lowDiv:  readDivergence(pivots4.lows,  pivotsP4.lows,  inst.id, partnerId, '4H low'),
+      };
+    }
+    smt = { partnerId, smt1h, smt4h };
   }
   const result   = scoreSetup({ trend4h, break1h, range, ote, fvgs, obs, smt, price: inst.price, instId: inst.id });
   return { trend4h, break1h, range, ote, fvgs, obs, smt, result };
@@ -927,10 +955,10 @@ function refreshScanCache(inst){
   const partner = partnerId ? byId(partnerId) : null;
   const finish = ()=>{
     if(!state.h4 || !state.h1) return;
-    if(partner && !state.p1) return;
+    if(partner && (!state.p1 || !state.p4)) return;
     const bars4 = state.h4.bars, bars1 = state.h1.bars;
     if(bars4.length<6 || bars1.length<6) return;
-    const bundle = computeScan(inst, bars4, bars1, state.p1 ? state.p1.bars : null);
+    const bundle = computeScan(inst, bars4, bars1, state.p1 ? state.p1.bars : null, state.p4 ? state.p4.bars : null);
     const prevLabel = scanCache[inst.id] ? scanCache[inst.id].result.label : null;
     scanCache[inst.id] = { ...bundle, updatedAt: Date.now() };
     paintScanBadge(inst);
@@ -938,7 +966,10 @@ function refreshScanCache(inst){
   };
   loadTF(inst, '4H', e=>{ state.h4=e; finish(); });
   loadTF(inst, '1H', e=>{ state.h1=e; finish(); });
-  if(partner) loadTF(partner, '1H', e=>{ state.p1=e; finish(); });
+  if(partner){
+    loadTF(partner, '1H', e=>{ state.p1=e; finish(); });
+    loadTF(partner, '4H', e=>{ state.p4=e; finish(); });
+  }
 }
 
 async function renderSCAN(tickerId){
@@ -947,25 +978,28 @@ async function renderSCAN(tickerId){
   const partner = partnerId ? byId(partnerId) : null;
   document.getElementById('detail').innerHTML = `
     <div class="detail-head"><span class="code">SCAN</span>
-      <div><div class="detail-title">${inst.id} Confluence Scan</div><div class="detail-sub">4H/1H range read \u00b7 MSS/BOS \u00b7 FVG/OB/IFVG \u00b7 OTE \u00b7 SMT vs ${partnerId||'\u2014'} \u00b7 scored against your own rules</div></div>
+      <div><div class="detail-title">${inst.id} Confluence Scan</div><div class="detail-sub">4H/1H range read \u00b7 MSS/BOS \u00b7 FVG/OB/IFVG \u00b7 OTE \u00b7 SMT (1H+4H) vs ${partnerId||'\u2014'} \u00b7 scored against your own rules</div></div>
       ${backLink()}
     </div>
     <div id="scan-body"><div class="help-note">Loading 4H + 1H structure\u2026</div></div>`;
   const state = {};
-  const maybeRun = ()=>{ if(state.h4 && state.h1 && (!partner || state.p1)) paintSCAN(inst, state.h4, state.h1, state.p1); };
+  const maybeRun = ()=>{ if(state.h4 && state.h1 && (!partner || (state.p1 && state.p4))) paintSCAN(inst, state.h4, state.h1, state.p1, state.p4); };
   loadTF(inst, '4H', e=>{ state.h4=e; maybeRun(); });
   loadTF(inst, '1H', e=>{ state.h1=e; maybeRun(); });
-  if(partner) loadTF(partner, '1H', e=>{ state.p1=e; maybeRun(); });
+  if(partner){
+    loadTF(partner, '1H', e=>{ state.p1=e; maybeRun(); });
+    loadTF(partner, '4H', e=>{ state.p4=e; maybeRun(); });
+  }
 }
 
-function paintSCAN(inst, h4entry, h1entry, p1entry){
+function paintSCAN(inst, h4entry, h1entry, p1entry, p4entry){
   if(view.code!=='SCAN' || view.ticker!==inst.id) return;
   const body = document.getElementById('scan-body');
   if(!body) return;
   const bars4 = h4entry.bars, bars1 = h1entry.bars;
   if(bars4.length<6 || bars1.length<6){ body.innerHTML = '<div class="help-note">Not enough bars yet\u2026</div>'; return; }
 
-  const { trend4h, break1h, range, ote, fvgs, obs, smt, result } = computeScan(inst, bars4, bars1, p1entry ? p1entry.bars : null);
+  const { trend4h, break1h, range, ote, fvgs, obs, smt, result } = computeScan(inst, bars4, bars1, p1entry ? p1entry.bars : null, p4entry ? p4entry.bars : null);
   const price = inst.price;
   const be      = beGuidance(result, range);
   const dirColor = result.bias==='BULLISH' ? 'var(--green)' : result.bias==='BEARISH' ? 'var(--red)' : 'var(--muted)';
@@ -1021,8 +1055,14 @@ function paintSCAN(inst, h4entry, h1entry, p1entry){
     <div class="intel-card" style="margin-bottom:16px;">
       <h3>SMT DIVERGENCE ${smt?('vs '+smt.partnerId):''}</h3>
       ${smt ? `
-        <div class="intel-row"><i class="dot ${smt.highDiv.flag?'dot-bear':'dot-neu'}"></i>${smt.highDiv.text}</div>
-        <div class="intel-row"><i class="dot ${smt.lowDiv.flag?'dot-bull':'dot-neu'}"></i>${smt.lowDiv.text}</div>
+        <div style="font-size:10px;color:var(--amber);letter-spacing:1px;margin-bottom:4px;">4H (higher weight)</div>
+        ${smt.smt4h ? `
+          <div class="intel-row"><i class="dot ${smt.smt4h.highDiv.flag?'dot-bear':'dot-neu'}"></i>${smt.smt4h.highDiv.text}</div>
+          <div class="intel-row"><i class="dot ${smt.smt4h.lowDiv.flag?'dot-bull':'dot-neu'}"></i>${smt.smt4h.lowDiv.text}</div>
+        ` : '<div class="intel-row" style="color:var(--muted);">Not enough 4H bars yet</div>'}
+        <div style="font-size:10px;color:var(--muted);letter-spacing:1px;margin:10px 0 4px;">1H</div>
+        <div class="intel-row"><i class="dot ${smt.smt1h.highDiv.flag?'dot-bear':'dot-neu'}"></i>${smt.smt1h.highDiv.text}</div>
+        <div class="intel-row"><i class="dot ${smt.smt1h.lowDiv.flag?'dot-bull':'dot-neu'}"></i>${smt.smt1h.lowDiv.text}</div>
       ` : '<div style="font-size:12px;color:var(--muted);">No correlated partner tracked, or not enough bars yet.</div>'}
     </div>
 

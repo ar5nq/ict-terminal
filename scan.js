@@ -208,18 +208,38 @@ function scoreSetup({ trend4h, break1h, range, ote, fvgs, obs, smt, price, instI
   if(invFVGs.length){ score+=10; notes.push(`${invFVGs.length} inversed FVG (IFVG) on the chart — reversal marker (+10)`); }
   if((obs||[]).length){ score+=10; notes.push(`${obs.length} order block(s) mapped on this leg (+10)`); }
   if(smt){
-    const bullSMT = bias==='BULLISH' && smt.lowDiv && smt.lowDiv.flag && smt.lowDiv.aUp===false && smt.lowDiv.bUp===true;
-    const bearSMT = bias==='BEARISH' && smt.highDiv && smt.highDiv.flag && smt.highDiv.aUp===true && smt.highDiv.bUp===false;
-    if(bullSMT){ score+=10; notes.push(`SMT divergence vs ${smt.partnerId} on the low — ${instId} weaker there, bullish tell (+10)`); }
-    else if(bearSMT){ score+=10; notes.push(`SMT divergence vs ${smt.partnerId} on the high — ${instId} stronger there, bearish tell (+10)`); }
+    // Each timeframe's SMT reading, independent of bias — classic ICT tells:
+    // a low divergence (we print lower, partner prints higher) = bullish tell;
+    // a high divergence (we print higher, partner prints lower) = bearish tell.
+    const smtRead = (divSet) => {
+      if(!divSet) return null;
+      if(divSet.lowDiv && divSet.lowDiv.flag && divSet.lowDiv.aUp===false && divSet.lowDiv.bUp===true) return 'bullish';
+      if(divSet.highDiv && divSet.highDiv.flag && divSet.highDiv.aUp===true && divSet.highDiv.bUp===false) return 'bearish';
+      return null;
+    };
+    const read1h = smtRead(smt.smt1h);
+    const read4h = smtRead(smt.smt4h);
+
+    // Higher timeframe SMT carries more weight — it reflects broader
+    // positioning, not short-term noise that can resolve in an hour.
+    if(read4h==='bullish' && bias==='BULLISH'){ score+=15; notes.push(`4H SMT divergence vs ${smt.partnerId} on the low — ${instId} weaker there, bullish tell, HTF (+15)`); }
+    else if(read4h==='bearish' && bias==='BEARISH'){ score+=15; notes.push(`4H SMT divergence vs ${smt.partnerId} on the high — ${instId} stronger there, bearish tell, HTF (+15)`); }
+
+    if(read1h==='bullish' && bias==='BULLISH'){ score+=10; notes.push(`1H SMT divergence vs ${smt.partnerId} on the low — ${instId} weaker there, bullish tell (+10)`); }
+    else if(read1h==='bearish' && bias==='BEARISH'){ score+=10; notes.push(`1H SMT divergence vs ${smt.partnerId} on the high — ${instId} stronger there, bearish tell (+10)`); }
+
+    if(read1h && read4h && read1h!==read4h){
+      notes.push(`Heads up: 1H SMT reads ${read1h}, 4H SMT reads ${read4h} — they disagree, weight the 4H read more`);
+    }
   }
   score = Math.max(0, Math.min(100, score));
   const label = score>=70?'STRONG':score>=45?'MODERATE':score>=20?'WEAK':'AVOID';
   return { score, bias, label, notes, withTrend };
 }
 
-function computeScan(inst, bars4, bars1, partnerBars1){
+function computeScan(inst, bars4, bars1, partnerBars1, partnerBars4){
   const pivots1  = findPivots(bars1, 2);
+  const pivots4  = findPivots(bars4, 2);
   const trend4h  = structureTrend(bars4, 2);
   const break1h  = lastBreak(bars1, trend4h.bias, 2);
   const range    = classifyRange(bars4, bars1);
@@ -229,12 +249,20 @@ function computeScan(inst, bars4, bars1, partnerBars1){
   const partnerId = SMT_PARTNER[inst.id];
   let smt = null;
   if(partnerId && partnerBars1 && partnerBars1.length>=6){
-    const pivotsP = findPivots(partnerBars1, 2);
-    smt = {
-      partnerId,
-      highDiv: readDivergence(pivots1.highs, pivotsP.highs, inst.id, partnerId, 'high'),
-      lowDiv:  readDivergence(pivots1.lows,  pivotsP.lows,  inst.id, partnerId, 'low'),
+    const pivotsP1 = findPivots(partnerBars1, 2);
+    const smt1h = {
+      highDiv: readDivergence(pivots1.highs, pivotsP1.highs, inst.id, partnerId, '1H high'),
+      lowDiv:  readDivergence(pivots1.lows,  pivotsP1.lows,  inst.id, partnerId, '1H low'),
     };
+    let smt4h = null;
+    if(partnerBars4 && partnerBars4.length>=6){
+      const pivotsP4 = findPivots(partnerBars4, 2);
+      smt4h = {
+        highDiv: readDivergence(pivots4.highs, pivotsP4.highs, inst.id, partnerId, '4H high'),
+        lowDiv:  readDivergence(pivots4.lows,  pivotsP4.lows,  inst.id, partnerId, '4H low'),
+      };
+    }
+    smt = { partnerId, smt1h, smt4h };
   }
   const result   = scoreSetup({ trend4h, break1h, range, ote, fvgs, obs, smt, price: inst.price, instId: inst.id });
   return { trend4h, break1h, range, ote, fvgs, obs, smt, result };
@@ -381,9 +409,10 @@ async function main(){
     }
     const partnerId = SMT_PARTNER[id];
     const partnerBars1 = cache[partnerId] ? cache[partnerId].bars1 : null;
+    const partnerBars4 = cache[partnerId] ? cache[partnerId].bars4 : null;
     const price = own.bars1[own.bars1.length-1].c;
 
-    const bundle = computeScan({ id, price }, own.bars4, own.bars1, partnerBars1);
+    const bundle = computeScan({ id, price }, own.bars4, own.bars1, partnerBars1, partnerBars4);
     const prevLabel = state[id];
     console.log(`${id}: ${bundle.result.bias || 'NO READ'} · ${bundle.result.label} (${bundle.result.score}/100), was ${prevLabel || 'unknown'}`);
 
