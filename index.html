@@ -978,7 +978,7 @@ async function renderSCAN(tickerId){
   const partner = partnerId ? byId(partnerId) : null;
   document.getElementById('detail').innerHTML = `
     <div class="detail-head"><span class="code">SCAN</span>
-      <div><div class="detail-title">${inst.id} Confluence Scan</div><div class="detail-sub">4H/1H range read \u00b7 MSS/BOS \u00b7 FVG/OB/IFVG \u00b7 OTE \u00b7 SMT (1H+4H) vs ${partnerId||'\u2014'} \u00b7 scored against your own rules</div></div>
+      <div><div class="detail-title">${inst.id} Confluence Scan</div><div class="detail-sub">4H/1H range read \u00b7 MSS/BOS \u00b7 FVG/OB/IFVG \u00b7 OTE \u00b7 SMT (1H+4H) vs ${partnerId||'\u2014'} \u00b7 15m/5m gaps for entry timing \u00b7 scored against your own rules</div></div>
       ${backLink()}
     </div>
     <div id="scan-body"><div class="help-note">Loading 4H + 1H structure\u2026</div></div>`;
@@ -1075,6 +1075,10 @@ function paintSCAN(inst, h4entry, h1entry, p1entry, p4entry){
       </div>
     </div>
 
+    <div style="font-size:11px;color:var(--muted);letter-spacing:1.5px;margin:20px 0 8px;">LOWER TIMEFRAME GAPS \u2014 for timing the entry once 1H/4H says look here</div>
+    <div id="scan-ltf-gaps"><div class="help-note" style="margin:0;">Loading 15m + 5m\u2026</div></div>
+    <div style="margin-bottom:16px;"></div>
+
     <div class="intel-card" style="margin-bottom:16px;">
       <h3>WHY THIS SCORE</h3>
       ${result.notes.map(n=>`<div class="intel-row" style="color:var(--text);font-size:12px;">${n}</div>`).join('') || '<div class="intel-row" style="color:var(--muted);">\u2014</div>'}
@@ -1093,6 +1097,36 @@ function paintSCAN(inst, h4entry, h1entry, p1entry, p4entry){
   requestAnimationFrame(()=>{
     try{ drawCandles(document.getElementById('scan-chart'), bars1.slice(-60), inst.digits, levels); }catch(err){}
   });
+
+  // Lower-timeframe FVG/OB: fetched separately, doesn't block the main paint
+  // above. Display-only for now — not folded into the score, since this is
+  // for timing an entry inside a setup the 4H/1H read already flagged, not
+  // for deciding whether to look at it in the first place.
+  const ltfState = {};
+  const paintLTF = ()=>{
+    if(view.code!=='SCAN' || view.ticker!==inst.id) return;
+    const el = document.getElementById('scan-ltf-gaps');
+    if(!el) return;
+    if(!ltfState.m15 || !ltfState.m5) return;
+    const ltfCard = (label, bars)=>{
+      if(bars.length<6) return `<div class="intel-card"><h3>${label}</h3><div class="intel-row" style="color:var(--muted);">Not enough bars yet</div></div>`;
+      const p = findPivots(bars, 2);
+      const g = findFVGs(bars, 4);
+      const o = findOrderBlocks(bars, p);
+      return `<div class="intel-card"><h3>${label}</h3>
+        <div style="font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:4px;">FVG</div>
+        ${g.length? g.slice(-3).reverse().map(x=>`<div class="intel-row"><i class="dot ${x.dir==='BULLISH'?'dot-bull':'dot-bear'}"></i>${x.dir}${x.inversed?' \u00b7 IFVG':x.filled?' \u00b7 filled':''}<b style="margin-left:auto;">${fmt(inst,x.bottom)}\u2013${fmt(inst,x.top)}</b></div>`).join('') : '<div class="intel-row" style="color:var(--muted);">None found</div>'}
+        <div style="font-size:10px;color:var(--muted);letter-spacing:1px;margin:10px 0 4px;">ORDER BLOCKS</div>
+        ${o.length? o.slice(-3).reverse().map(x=>`<div class="intel-row"><i class="dot ${x.type.includes('BULLISH')?'dot-bull':'dot-bear'}"></i>${x.type}<b style="margin-left:auto;">${fmt(inst,x.bottom)}\u2013${fmt(inst,x.top)}</b></div>`).join('') : '<div class="intel-row" style="color:var(--muted);">None found</div>'}
+      </div>`;
+    };
+    el.innerHTML = `<div class="intel-grid" style="grid-template-columns:1fr 1fr;">
+      ${ltfCard('15m', ltfState.m15.bars)}
+      ${ltfCard('5m', ltfState.m5.bars)}
+    </div>`;
+  };
+  loadTF(inst, '15m', e=>{ ltfState.m15=e; paintLTF(); });
+  loadTF(inst, '5m',  e=>{ ltfState.m5=e;  paintLTF(); });
 }
 
 /* ================= LIQ ================= */
