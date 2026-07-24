@@ -409,6 +409,21 @@ async function main(){
   // scoring/alerting for that instrument rather than trust it.
   const STALE_MINUTES = 90; // generous over the 60min bar interval + poll lag
 
+  // Belt and suspenders: the bar-age check trusts Yahoo's timestamp to look
+  // stale, which isn't always reliable — a closed-market bar can still carry
+  // a recent-looking timestamp. This is a deterministic calendar check
+  // (closed Fri 21:00 UTC through Sun 21:00 UTC) that can't be fooled by that.
+  function isMarketOpen(){
+    const now = new Date();
+    const day = now.getUTCDay();
+    const hour = now.getUTCHours();
+    if(day===6) return false;
+    if(day===0 && hour<21) return false;
+    if(day===5 && hour>=21) return false;
+    return true;
+  }
+  const marketOpen = isMarketOpen();
+
   for(const id of WATCHLIST){
     const inst = INSTRUMENTS[id];
     const own = cache[id];
@@ -418,8 +433,8 @@ async function main(){
     }
     const lastBarT = own.bars1[own.bars1.length-1].t;
     const ageMin = (Date.now()/1000 - lastBarT) / 60;
-    if(ageMin > STALE_MINUTES){
-      console.log(`${id}: last bar is ${Math.round(ageMin)}min old — market looks closed (weekend/holiday). Skipping scoring+alerts this run rather than trust stale data.`);
+    if(ageMin > STALE_MINUTES || !marketOpen){
+      console.log(`${id}: ${!marketOpen ? 'market is closed by calendar' : `last bar is ${Math.round(ageMin)}min old`} — skipping scoring+alerts this run rather than trust stale/closed-market data.`);
       continue;
     }
     const partnerId = SMT_PARTNER[id];

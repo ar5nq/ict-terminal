@@ -980,7 +980,11 @@ function refreshScanCache(inst){
     const prevLabel = scanCache[inst.id] ? scanCache[inst.id].result.label : null;
     scanCache[inst.id] = { ...bundle, updatedAt: Date.now() };
     paintScanBadge(inst);
-    if(SCAN_ALERT_WATCHLIST.includes(inst.id) && bundle.result.label==='STRONG' && prevLabel!=='STRONG') fireScanAlert(inst, bundle.result);
+    // Belt and suspenders: the bar-age check above trusts Yahoo's timestamp
+    // to look stale, which isn't always reliable. isMarketOpen() is a
+    // deterministic calendar check that can't be fooled by a bar that still
+    // looks "recent enough" on a closed weekend.
+    if(isMarketOpen() && SCAN_ALERT_WATCHLIST.includes(inst.id) && bundle.result.label==='STRONG' && prevLabel!=='STRONG') fireScanAlert(inst, bundle.result);
   };
   loadTF(inst, '4H', e=>{ state.h4=e; finish(); });
   loadTF(inst, '1H', e=>{ state.h1=e; finish(); });
@@ -1028,7 +1032,7 @@ function paintSCAN(inst, h4entry, h1entry, p1entry, p4entry){
   const prevLabel = scanCache[inst.id] ? scanCache[inst.id].result.label : null;
   scanCache[inst.id] = { trend4h, break1h, range, ote, fvgs, obs, smt, result, updatedAt: Date.now() };
   paintScanBadge(inst);
-  if(!isStale && SCAN_ALERT_WATCHLIST.includes(inst.id) && result.label==='STRONG' && prevLabel!=='STRONG') fireScanAlert(inst, result);
+  if(!isStale && isMarketOpen() && SCAN_ALERT_WATCHLIST.includes(inst.id) && result.label==='STRONG' && prevLabel!=='STRONG') fireScanAlert(inst, result);
 
   const levels = [];
   if(range){
