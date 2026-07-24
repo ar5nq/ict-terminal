@@ -220,7 +220,22 @@ INSTRUMENTS.forEach(inst=>{
 });
 
 /* ================= data: real fetch + sim fallback ================= */
+// Standard forex-week hours as a reasonable approximation for all 6
+// instruments here (majors, gold/silver, index CFDs): closed Friday ~21:00
+// UTC through Sunday ~21:00 UTC. Not exact for every broker/instrument, but
+// close enough to stop pretending the market is live when it plainly isn't.
+function isMarketOpen(){
+  const now = new Date();
+  const day = now.getUTCDay(); // 0=Sun, 5=Fri, 6=Sat
+  const hour = now.getUTCHours();
+  if(day===6) return false;                 // all Saturday
+  if(day===0 && hour<21) return false;       // Sunday before 21:00 UTC
+  if(day===5 && hour>=21) return false;      // Friday from 21:00 UTC
+  return true;
+}
+
 function fetchTick(inst){
+  if(!isMarketOpen()) return; // frozen — nothing to simulate when the real market is shut
   const drift = (Math.random()-0.5) * inst.vol;
   const meanRevert = (inst.open - inst.price) * 0.003;
   inst.price = inst.price + drift + meanRevert;
@@ -360,6 +375,7 @@ function renderCC(){
     document.getElementById(`price-${inst.id}`).className = 'price ' + (isUp?'up':'down');
     const badge = document.getElementById(`badge-${inst.id}`), dot = document.getElementById(`dot-${inst.id}`);
     if(inst.live){ badge.textContent='LIVE'; badge.className='badge live'; dot.style.background='var(--green)'; }
+    else if(!isMarketOpen()){ badge.textContent='CLOSED'; badge.className='badge sim'; dot.style.background='var(--muted)'; }
     else{ badge.textContent='SIM'; badge.className='badge sim'; dot.style.background='var(--amber)'; }
     drawChart(inst, ccCanvases[inst.id]);
   });
