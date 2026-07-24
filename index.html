@@ -374,8 +374,8 @@ function renderCC(){
     chgEl.className = 'chg ' + (isUp?'up':'down');
     document.getElementById(`price-${inst.id}`).className = 'price ' + (isUp?'up':'down');
     const badge = document.getElementById(`badge-${inst.id}`), dot = document.getElementById(`dot-${inst.id}`);
-    if(inst.live){ badge.textContent='LIVE'; badge.className='badge live'; dot.style.background='var(--green)'; }
-    else if(!isMarketOpen()){ badge.textContent='CLOSED'; badge.className='badge sim'; dot.style.background='var(--muted)'; }
+    if(!isMarketOpen()){ badge.textContent='CLOSED'; badge.className='badge sim'; dot.style.background='var(--muted)'; }
+    else if(inst.live){ badge.textContent='LIVE'; badge.className='badge live'; dot.style.background='var(--green)'; }
     else{ badge.textContent='SIM'; badge.className='badge sim'; dot.style.background='var(--amber)'; }
     drawChart(inst, ccCanvases[inst.id]);
   });
@@ -2289,6 +2289,7 @@ function simulateStep(){
   checkAlerts();
 }
 async function pollLiveData(){
+  if(!isMarketOpen()) return; // market's shut — don't even poll, so no residual/indicative quote jitter can move the price
   await Promise.all(INSTRUMENTS.map(inst => fetchYahoo(inst)));
   refreshView();
 }
