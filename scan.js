@@ -400,11 +400,26 @@ async function main(){
     }
   }
 
+  // A closed market (weekend, holiday) can still hand back a bar series from
+  // Yahoo that's shaped slightly differently run to run (a stale trailing
+  // candle, a shifted rolling window) even though price hasn't moved. Since
+  // the score is a pure function of "whatever bars we got," that alone can
+  // flip STRONG on zero real movement. If the last bar is way older than a
+  // live 1H feed should ever be, treat this run's data as stale and skip
+  // scoring/alerting for that instrument rather than trust it.
+  const STALE_MINUTES = 90; // generous over the 60min bar interval + poll lag
+
   for(const id of WATCHLIST){
     const inst = INSTRUMENTS[id];
     const own = cache[id];
     if(!own || own.bars4.length<6 || own.bars1.length<6){
       console.log(`${id}: not enough bars, skipping this run`);
+      continue;
+    }
+    const lastBarT = own.bars1[own.bars1.length-1].t;
+    const ageMin = (Date.now()/1000 - lastBarT) / 60;
+    if(ageMin > STALE_MINUTES){
+      console.log(`${id}: last bar is ${Math.round(ageMin)}min old — market looks closed (weekend/holiday). Skipping scoring+alerts this run rather than trust stale data.`);
       continue;
     }
     const partnerId = SMT_PARTNER[id];

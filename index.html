@@ -958,6 +958,8 @@ function refreshScanCache(inst){
     if(partner && (!state.p1 || !state.p4)) return;
     const bars4 = state.h4.bars, bars1 = state.h1.bars;
     if(bars4.length<6 || bars1.length<6) return;
+    const lastBarT = bars1[bars1.length-1].t;
+    if(lastBarT!=null && (Date.now()/1000 - lastBarT)/60 > 90) return; // stale/closed-market data — don't trust it enough to score or alert
     const bundle = computeScan(inst, bars4, bars1, state.p1 ? state.p1.bars : null, state.p4 ? state.p4.bars : null);
     const prevLabel = scanCache[inst.id] ? scanCache[inst.id].result.label : null;
     scanCache[inst.id] = { ...bundle, updatedAt: Date.now() };
@@ -1003,12 +1005,14 @@ function paintSCAN(inst, h4entry, h1entry, p1entry, p4entry){
   const price = inst.price;
   const be      = beGuidance(result, range);
   const dirColor = result.bias==='BULLISH' ? 'var(--green)' : result.bias==='BEARISH' ? 'var(--red)' : 'var(--muted)';
+  const lastBarT = bars1[bars1.length-1].t;
+  const isStale = lastBarT!=null && (Date.now()/1000 - lastBarT)/60 > 90;
 
   // keep the CC badge + alert engine in sync with whatever this view just computed
   const prevLabel = scanCache[inst.id] ? scanCache[inst.id].result.label : null;
   scanCache[inst.id] = { trend4h, break1h, range, ote, fvgs, obs, smt, result, updatedAt: Date.now() };
   paintScanBadge(inst);
-  if(SCAN_ALERT_WATCHLIST.includes(inst.id) && result.label==='STRONG' && prevLabel!=='STRONG') fireScanAlert(inst, result);
+  if(!isStale && SCAN_ALERT_WATCHLIST.includes(inst.id) && result.label==='STRONG' && prevLabel!=='STRONG') fireScanAlert(inst, result);
 
   const levels = [];
   if(range){
@@ -1020,6 +1024,7 @@ function paintSCAN(inst, h4entry, h1entry, p1entry, p4entry){
   if(ote){ levels.push({price:ote.top, label:'OTE 61.8', color:'#c264ff'}); levels.push({price:ote.bottom, label:'OTE 79', color:'#c264ff'}); }
 
   body.innerHTML = `
+    ${isStale ? `<div class="intel-card" style="margin-bottom:16px;border-color:var(--red);"><div style="font-size:12px;color:var(--red);">\u26a0 Last bar is ${Math.round((Date.now()/1000-lastBarT)/60)}min old \u2014 market likely closed (weekend/holiday). This score is stale, not a live read, and won't trigger an alert.</div></div>` : ''}
     <div class="intel-verdict" style="border-color:${dirColor};">
       <div><div class="label">BIAS</div><div class="call" style="color:${dirColor};font-size:20px;">${result.bias||'NO READ'} \u00b7 ${result.label}</div></div>
       <div style="text-align:right;margin-left:auto;"><div class="label">SCORE</div><div class="call" style="font-size:20px;">${result.score}/100</div></div>
