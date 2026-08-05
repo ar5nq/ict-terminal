@@ -1,5 +1,5 @@
 {
-  "NAS100": "WEAK",
-  "EURUSD": "STRONG",
-  "XAUUSD": "MODERATE"
+  "NAS100": "NO READ",
+  "EURUSD": "MODERATE",
+  "XAUUSD": "NO READ"
 }
